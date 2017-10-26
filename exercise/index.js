@@ -1,4 +1,4 @@
-var Kinect2 = require('../lib/kinect2'),
+var Kinect2 = require('kinect2'),
 	express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
@@ -60,6 +60,7 @@ if(kinect.open()) {
 					bufferBodyFrames.duration = duration.toString();
 					bufferBodyFrames.bodyIndex = bodyIndex;
 					bodyIndex = -1;
+					console.log(JSON.stringify(bufferBodyFrames));
 					bufferTrial.push(bufferBodyFrames);
 					console.log('system in Result Display state'); // Action
 					socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
