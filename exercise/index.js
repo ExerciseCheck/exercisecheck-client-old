@@ -60,7 +60,7 @@ if(kinect.open()) {
 					bufferBodyFrames.duration = duration.toString();
 					bufferBodyFrames.bodyIndex = bodyIndex;
 					bodyIndex = -1;
-					console.log(JSON.stringify(bufferBodyFrames));
+					//console.log(JSON.stringify(bufferBodyFrames));
 					bufferTrial.push(bufferBodyFrames);
 					console.log('system in Result Display state'); // Action
 					socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
@@ -103,6 +103,9 @@ if(kinect.open()) {
 
 		// States
 		kinect.on('bodyFrame', function(bodyFrame){
+			console.log("new bodyframe received...");
+			console.log(JSON.stringify(bodyframe);
+
 			switch (systemState) {
 				case 1: //recording: save the data being recorded, give identification to client
 					socket.emit('rec', bodyFrame, systemState, bodyIndex);
