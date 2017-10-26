@@ -104,7 +104,7 @@ if(kinect.open()) {
 		// States
 		kinect.on('bodyFrame', function(bodyFrame){
 			console.log("new bodyframe received...");
-			console.log(JSON.stringify(bodyframe);
+			console.log(JSON.stringify(bodyframe)) ;
 
 			switch (systemState) {
 				case 1: //recording: save the data being recorded, give identification to client
