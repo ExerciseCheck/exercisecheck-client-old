@@ -71,7 +71,9 @@ if(kinect.open()) {
 					//
 					try {
                   console.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
-                  post(bufferTrial.bodyFrames);
+                  post({
+                     bodyFrames: bufferTrial
+                  });
                } catch (e) {
 						console.log("Error: " + e);
 					}
