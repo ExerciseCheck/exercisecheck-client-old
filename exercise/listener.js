@@ -21,8 +21,8 @@ console.log("Server started on localhost:8001");
 // forbid GET requests
 app.get('/', function(req, res) {
         console.log("rejecting GET request");
-        res.status(503);
-        res.send("<h1>503 Forbidden</h1>");
+        res.status(403);
+        res.send("<h1>403 Forbidden</h1>");
     });
 
 // receive POST request

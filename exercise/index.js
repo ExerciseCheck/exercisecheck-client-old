@@ -70,8 +70,9 @@ if(kinect.open()) {
 					// push buffer trial to server
 					//
 					try {
-						post(bufferTrial);
-                    } catch (e) {
+                  console.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
+                  post(bufferTrial.bodyFrames);
+               } catch (e) {
 						console.log("Error: " + e);
 					}
                     break;
@@ -158,12 +159,11 @@ if(kinect.open()) {
 
 // post JSON buffer to server
 // throws ECONNREFUSED
-function post(buffer) {
+function post(payload) {
     // TODO: TASKS:
-	// TODO:	1: unhardcode port + url
+ 	 // TODO:	1: unhardcode port + url
     // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
     // TODO:	3: Encryption?
-    console.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
     console.log('attempting push to server at 8001');
     const postReq = http.request({
         method: 'POST',
@@ -176,7 +176,7 @@ function post(buffer) {
     }, function (res) {
         console.log("request received");
     });
-    postReq.write(JSON.stringify(buffer));
+    postReq.write(JSON.stringify(payload));
     postReq.end();
 };
 
