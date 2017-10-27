@@ -2,7 +2,8 @@ var Kinect2 = require('kinect2'),
 	express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
-	io = require('socket.io').listen(server);
+	io = require('socket.io').listen(server),
+	listener = require('socket.io-client'),
 	XLSX = require('xlsx');
 const fs = require('fs');
 
@@ -65,6 +66,20 @@ if(kinect.open()) {
 					console.log('system in Result Display state'); // Action
 					socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
 					socket.broadcast.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled);
+					//
+					// push buffer trial to server
+					//
+
+					// TODO: TASKS:
+					// TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
+					// TODO:	2: Encryption?
+					console.log('bufferTrial [recorded '+(new Date().getTime().toString())+']');
+					console.log('attempting push to server at 8001'); // TODO: unhardcode port, url
+					var listenerSocket = listener("http://localhost:8001");
+                    listenerSocket.emit(
+						'bufferPush',
+						bufferTrial
+					);
 				break;
 
 				case 0: // 2->0, get the system from Result Disp to Live state.
