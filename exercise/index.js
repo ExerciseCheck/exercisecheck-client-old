@@ -1,9 +1,9 @@
 var Kinect2 = require('kinect2'),
 	express = require('express'),
 	app = express(),
+	http = require('http'),
 	server = require('http').createServer(app),
 	io = require('socket.io').listen(server),
-	listener = require('socket.io-client'),
 	XLSX = require('xlsx');
 const fs = require('fs');
 
@@ -69,18 +69,12 @@ if(kinect.open()) {
 					//
 					// push buffer trial to server
 					//
-
-					// TODO: TASKS:
-					// TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
-					// TODO:	2: Encryption?
-					console.log('bufferTrial [recorded '+(new Date().getTime().toString())+']');
-					console.log('attempting push to server at 8001'); // TODO: unhardcode port, url
-					var listenerSocket = listener("http://localhost:8001");
-                    listenerSocket.emit(
-						'bufferPush',
-						bufferTrial
-					);
-				break;
+					try {
+						post(bufferTrial);
+                    } catch (e) {
+						console.log("Error: " + e);
+					}
+                    break;
 
 				case 0: // 2->0, get the system from Result Disp to Live state.
 					kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
@@ -161,6 +155,30 @@ if(kinect.open()) {
 
 
 // Functions ----------------------------------------------------------------------
+
+// post JSON buffer to server
+// throws ECONNREFUSED
+function post(buffer) {
+    // TODO: TASKS:
+	// TODO:	1: unhardcode port + url
+    // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
+    // TODO:	3: Encryption?
+    console.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
+    console.log('attempting push to server at 8001');
+    const postReq = http.request({
+        method: 'POST',
+        host: 'localhost',
+        port: '8001',
+        path: '/',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    }, function (res) {
+        console.log("request received");
+    });
+    postReq.write(JSON.stringify(buffer));
+    postReq.end();
+};
 
 // Define the legal move between states
 function StateTrans(st){

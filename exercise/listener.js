@@ -6,7 +6,6 @@ const
     express = require("express"),
     app     = express(),
     server  = require('http').Server(app),
-    io      = require('socket.io')(server),
     bp      = require('body-parser');
 
 const
@@ -16,19 +15,23 @@ const
 // TODO: *probably* not what we want moving forward
 server.listen(8001);
 
+app.use(bp.json());
 console.log("Server started on localhost:8001");
-io.on("connection", function(socket) {
 
-        /* Receive a buffer from the patient */
-        socket.on("bufferPush", function (patientBuffer) {
-            const payloadSize = sizeof();
-            console.log("Buffer received at " + (new Date().getTime().toString()));
-            console.log('---\n');
-            bufferQueue.push(patientBuffer);
-        });
+// forbid GET requests
+app.get('/', function(req, res) {
+        console.log("rejecting GET request");
+        res.status(503);
+        res.send("<h1>503 Forbidden</h1>");
+    });
 
-    }
-);
+// receive POST request
+app.post('/', function(req, res) {
+        // TODO: validate buffer
+        console.log("Buffer received at " + (new Date().getTime().toString()));
+        console.log(JSON.stringify(req.body));
+        res.send();
+    });
 
 // ---
 
