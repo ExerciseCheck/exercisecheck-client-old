@@ -1,0 +1,9 @@
+node_modules/
+.idea/
+build/*
+
+*.iml
+*.log
+package-lock.json
+.DS_Store
+.directory
