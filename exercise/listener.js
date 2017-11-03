@@ -25,7 +25,7 @@ const
 const
     remote = {
         method: "POST",
-        host: "sail.bu.edu",
+        host: "localhost",
         port: "9001",
         path: "/api/refexercises",
         headers: {
@@ -50,9 +50,9 @@ io.on("connection", function(socket) {
 
         /* Receive a buffer from the patient */
         socket.on("bufferPush", function (patientBuffer) {
-            const timeOf = getTime();
-            console.log(logTimePrefix() + "Buffer received at " + timeOf);
-            //makePostToAnchor(patientBuffer);
+            // TODO: verify JSON?
+            console.log(logTimePrefix() + "Buffer received");
+            sendToAnchor(patientBuffer);
         });
 
         /* EC client tells listener to close */
@@ -62,15 +62,23 @@ io.on("connection", function(socket) {
 
 // ---
 
-/* make post request to anchor server */
-function makePostToAnchor(JSONpayload) {
+/* make HTTP request to anchor server */
+function sendToAnchor(JSONpayload) {
     // TODO: TASKS:
     // TODO:	1: unhardcode port + url
     // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
     // TODO:	3: Encryption?
-    console.log(logTimePrefix() + "Attempting POST to remote");
+    console.log(logTimePrefix() + "attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
     const postReq = http.request(remote, function (res) {
-        console.log("request received");
+        console.log(logTimePrefix() + "requested accepted by remote");
+    });
+
+    var success = true;
+
+    postReq.on("error", function (err) {
+        const prefix = logTimePrefix();
+        success = false;
+        console.error(prefix + err);
     });
     postReq.write(JSON.stringify(JSONpayload));
     postReq.end();
