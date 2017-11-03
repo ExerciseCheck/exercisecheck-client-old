@@ -80,7 +80,7 @@ if(kinect.open()) {
 						'bufferPush',
 						{
 							bodyFrames: bufferBodyFrames,
-							bodyIndex: bodyIndex;
+							bodyIndex: bodyIndex
 						}
 					);
 				break;
