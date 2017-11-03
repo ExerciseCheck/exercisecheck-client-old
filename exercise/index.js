@@ -7,6 +7,8 @@ var Kinect2 = require('kinect2'),
 	XLSX = require('xlsx');
 const fs = require('fs');
 
+var timeout = 3000;
+
 var kinect = new Kinect2();
 var clients = 0;
 if(kinect.open()) {
@@ -14,7 +16,7 @@ if(kinect.open()) {
 	server.listen(8000);
 	console.log('Server listening on port 8000');
 	console.log('Point your browser to http://localhost:8000');
-	app.use(express.static('public'))
+	app.use(express.static('public'));
 
 	// Initiation
 
@@ -30,135 +32,160 @@ if(kinect.open()) {
 	var startTime, duration;
 	var bodyIndex = -1;
 
-	console.log('system init state');
-	kinect.openBodyReader();
+    var listenerSocket = listener("http://localhost:8001");
+    console.log("attempting connection to listener");
 
-	// Connection On:
-	io.on('connection', function(socket){
-		++clients;
-		console.log('a user connected');
-		// systemState could be 0..3 during connection event, but only 2 needs signal emission
-		if (systemState == 2) {
-			socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled);
-		}
+    listenerSocket.on('connect_timeout', function (timeout) {
+    	alert("could not connect to listener");
+    	console.error("could not connect to listener");
+	});
 
-		// State Transition controlled by the client's command
-		socket.on('command',function(){
-			systemState = StateTrans(systemState);
-			switch (systemState) { // During the transition, prepare the buffer
-				case 1: // 0->1 or 3->1 Get ready for recording
-					activityLabeled = false;
-					bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
-					bufferBodyFrames = [];
-					console.log('System in Recording state');
-					startTime = new Date().getTime();
-				break;
+    listenerSocket.emit("clientInit");
 
-				case 2: // 1->2, Push the BodyFrames Data to the current trial
-					duration = ((new Date().getTime() - startTime)/1000).toFixed(2);
-					kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
-					bufferBodyFrames.durationsecs = duration;
-					bufferBodyFrames.duration = duration.toString();
-					bufferBodyFrames.bodyIndex = bodyIndex;
-					bodyIndex = -1;
-					//console.log(JSON.stringify(bufferBodyFrames));
-					bufferTrial.push(bufferBodyFrames);
-					console.log('system in Result Display state'); // Action
-					socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
-					socket.broadcast.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled);
-					//
-					// push buffer trial to server
-					//
+    listenerSocket.on("serverHello", function () {
+    	console.log("received hello from listener");
+        console.log('system init state');
+        kinect.openBodyReader();
 
-					// TODO: TASKS:
-					// TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
-					// TODO:	2: Encryption?
-					console.log('bufferTrial [recorded '+(new Date().getTime().toString())+']');
-					console.log('attempting push to server at 8001'); // TODO: unhardcode port, url
-					var listenerSocket = listener("http://localhost:8001");
-                    listenerSocket.emit(
-						'bufferPush',
-						{
-							bodyFrames: bufferBodyFrames,
-						}
-					);
-				break;
+        // Connection On:
+        io.on('connection', function (socket) {
+            ++clients;
+            console.log('a user connected');
+            // systemState could be 0..3 during connection event, but only 2 needs signal emission
+            if (systemState == 2) {
+                socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+            }
 
-				case 0: // 2->0, get the system from Result Disp to Live state.
-					kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
-					console.log('system in Live state');
-				default:
-			}
-		});
-		// Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
-		socket.on('dataLabelFromClient',function(num){ // label reference, exercise or discard
-			testID = bufferTrial.length-1;
-			if (gtArray[gtArray.length-1] == testID) { gtArray.pop(); }
-			if (exArray[exArray.length-1] == testID) { exArray.pop(); }
-						if (num == 1) { gtArray.push(testID); }
-			else{	if (num == 2) { exArray.push(testID); } }
-			activityLabeled = true;
-			socket.emit('serverDataLabeled');
-			socket.broadcast.emit('serverDataLabeled');
-		})
+            // State Transition controlled by the client's command
+            socket.on('command', function () {
+                systemState = StateTrans(systemState);
+                switch (systemState) { // During the transition, prepare the buffer
+                    case 1: // 0->1 or 3->1 Get ready for recording
+                        activityLabeled = false;
+                        bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
+                        bufferBodyFrames = [];
+                        console.log('System in Recording state');
+                        startTime = new Date().getTime();
+                        break;
 
-		socket.on('analyze',function(){
-	    console.log('analyze signal received!');
-			var chartData = chartAnalyze(bufferTrial,gtArray,exArray);
-			var barData = barAnalyze(bufferTrial, gtArray, exArray);
-	    socket.emit('report',chartData, barData, gtArray, exArray);
+                    case 2: // 1->2, Push the BodyFrames Data to the current trial
+                        duration = ((new Date().getTime() - startTime) / 1000).toFixed(2);
+                        kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
+                        bufferBodyFrames.durationsecs = duration;
+                        bufferBodyFrames.duration = duration.toString();
+                        bufferBodyFrames.bodyIndex = bodyIndex;
+                        bodyIndex = -1;
+                        bufferTrial.push(bufferBodyFrames);
+                        console.log('system in Result Display state'); // Action
+                        socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
+                        socket.broadcast.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+                        //
+                        // push buffer trial to server
+                        //
+
+                        // TODO: TASKS:
+                        // TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
+                        // TODO:	2: Encryption?
+                        console.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
+                        console.log('attempting push to server at 8001'); // TODO: unhardcode port, url
+                        listenerSocket.emit(
+                            'bufferPush',
+                            {
+                                bodyFrames: bufferBodyFrames
+                            }
+                        );
+                        // TODO: doesn't work... why?
+                        listenerSocket.on("remoteError", function (msg) {
+                                alert("Oh no! " + msg);
+                                console.err(msg);
+                            }
+                        );
+                        break;
+
+                    case 0: // 2->0, get the system from Result Disp to Live state.
+                        kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
+                        console.log('system in Live state');
+                    default:
+                }
+            });
+            // Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
+            socket.on('dataLabelFromClient', function (num) { // label reference, exercise or discard
+                testID = bufferTrial.length - 1;
+                if (gtArray[gtArray.length - 1] == testID) {
+                    gtArray.pop();
+                }
+                if (exArray[exArray.length - 1] == testID) {
+                    exArray.pop();
+                }
+                if (num == 1) {
+                    gtArray.push(testID);
+                }
+                else {
+                    if (num == 2) {
+                        exArray.push(testID);
+                    }
+                }
+                activityLabeled = true;
+                socket.emit('serverDataLabeled');
+                socket.broadcast.emit('serverDataLabeled');
+            })
+
+            socket.on('analyze', function () {
+                console.log('analyze signal received!');
+                var chartData = chartAnalyze(bufferTrial, gtArray, exArray);
+                var barData = barAnalyze(bufferTrial, gtArray, exArray);
+                socket.emit('report', chartData, barData, gtArray, exArray);
+            });
+
+            socket.on('saveRequest', function (filename) {
+                save2xlsx(bufferTrial, gtArray, exArray, filename);
+            });
+
+            socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
+                var curveData = curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype);
+                socket.emit('curveResult', curveData);
+            });
+
+            // States
+            kinect.on('bodyFrame', function (bodyFrame) {
+                switch (systemState) {
+                    case 1: //recording: save the data being recorded, give identification to client
+                        socket.emit('rec', bodyFrame, systemState, bodyIndex);
+                        socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
+                        bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
+                        break;
+
+                    case 2: //display
+                        console.log('system in display state, but system is streaming. Something wrong here.');
+                        break;
+
+                    case 0: //live
+                        bufferBodyFrames = [];
+                        bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
+                        socket.emit('live', bodyFrame, systemState)
+                        socket.broadcast.emit('live', bodyFrame, systemState);
+                        break;
+
+                    case 3: //3 init
+                        bufferBodyFrames = [];
+                        bufferBodyFrames.push(bodyFrame);
+                        socket.emit('init', bodyFrame, systemState);
+                        socket.broadcast.emit('init', bodyFrame, systemState);
+                        break;
+
+                    default:
+                        console.log('System State unknown');
+                }//end of switch
+            }); // end of kinect.on('bodyframe',function)
+
+            // disconnect
+            socket.on('disconnect', function () {
+                console.log('a user disconnect');
+                listenerSocket.emit("clientGoodbye");
+                --clients;
+            })
+        }); // end of io.on('connection',function)
     });
-
-		socket.on('saveRequest',function(filename){
-			save2xlsx(bufferTrial,gtArray,exArray,filename);
-		});
-
-		socket.on('curveRequest',function(gtInd,exInd,jt,datatype){
-			var curveData = curveAnalyze(bufferTrial,gtArray,exArray,gtInd,exInd,jt,datatype);
-			socket.emit('curveResult',curveData);
-		});
-
-		// States
-		kinect.on('bodyFrame', function(bodyFrame){
-			console.log("new bodyframe received...");
-			console.log(JSON.stringify(bodyFrame)) ;
-
-			switch (systemState) {
-				case 1: //recording: save the data being recorded, give identification to client
-					socket.emit('rec', bodyFrame, systemState, bodyIndex);
-					socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
-					bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
-					break;
-
-				case 2: //display
-					console.log('system in display state, but system is streaming. Something wrong here.');
-					break;
-
-				case 0: //live
-					bufferBodyFrames = [];
-					bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
-					socket.emit('live', bodyFrame,systemState)
-					socket.broadcast.emit('live', bodyFrame,systemState);
-					break;
-
-				case 3: //3 init
-					bufferBodyFrames = [];
-					bufferBodyFrames.push(bodyFrame);
-					socket.emit('init', bodyFrame, systemState);
-					socket.broadcast.emit('init', bodyFrame, systemState);
-					break;
-
-				default:
-					console.log('System State unknown');
-			}//end of switch
-		}); // end of kinect.on('bodyframe',function)
-
-		// disconnect
-		socket.on('disconnect',function(){
-			console.log('a user disconnect');
-			--clients;
-		})
-	}); // end of io.on('connection',function)
 }//end of kinect.open()
 
 

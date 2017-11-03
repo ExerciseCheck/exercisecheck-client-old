@@ -34,59 +34,117 @@ const
     };
 
 /* logging, time utils */
+// TODO: refactor logging utils into separate file log.js
 const
-    getTime = () => { return new Date().getTime().toString(); };
+    scriptname = require('path').basename(__filename);
 
 const
-    logTimePrefix = () => { return "[" + getTime() + "] " };
+    getTime = () => { return new Date().getTime().toString(); },
+    logPrefix = () => { return "[" + scriptname + " " + getTime() + "] " };
 
 // ---
 
-// set the listener up
-server.listen(listenerPort);
-console.log(logTimePrefix() + "Ec JSON buffer listener started on localhost:" + listenerPort.toString());
+/* Windows isn't POSIX compliant so we need to open a readline object to translate process signals;
+ * credit: https://stackoverflow.com/a/14861513 */
+if (process.platform === "win32") {
+    var rl = require("readline").createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+    rl.on("SIGINT", function() {
+        process.emit("SIGINT");
+    });
+};
 
-io.on("connection", function(socket) {
-
-        /* Receive a buffer from the patient */
-        socket.on("bufferPush", function (patientBuffer) {
-            // TODO: verify JSON?
-            console.log(logTimePrefix() + "Buffer received");
-            sendToAnchor(patientBuffer);
-        });
-
-        /* EC client tells listener to close */
-        socket.on("listenerClose", goodbye);
+/* Quit gracefully on a keyboard interrupt */
+process.on("SIGINT", function () {
+        console.log(logPrefix() + "received SIGINT; attempting graceful shutdown");
+        goodbye();
     }
 );
 
 // ---
 
-/* make HTTP request to anchor server */
+// set the listener up
+server.listen(listenerPort);
+io.path(path);
+//io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
+console.log(logPrefix() + "Ec JSON buffer listener started on localhost:" + listenerPort.toString() + path);
+
+var clients = 0;
+/* socket logic */
+io.on("connection", function (socket) {
+        console.log(logPrefix() + "received connection");
+
+        /* Process and verify client initialization request */
+        socket.on("clientInit", function () {
+           console.log(logPrefix() + "received init request from client");
+
+           // limit number of connections to 1
+           if (++clients > 1) {
+               console.error(logPrefix() + "dropping connection attempted since EC is already connected to this socket");
+               socket.disconnect();
+           } else {
+               console.log(logPrefix() + "accepting connection, sending serverHello back");
+               socket.emit("serverHello");
+           };
+        });
+
+        /* Close a connection on goodbye */
+        socket.on("clientGoodbye", function (bye) {
+            console.log(logPrefix() + "client disconnected");
+            clients = Math.max(--clients, 0);
+            socket.emit("serverGoodbye");
+            socket.disconnect();
+        });
+
+        /* Receive a buffer from the patient */
+        socket.on("bufferPush", function (patientBuffer) {
+            // TODO: verify JSON?
+            console.log(logPrefix() + "buffer received");
+
+            /* write to anchor; on fail, inform EC client contact has failed */
+            if (!sendToAnchor(patientBuffer)) {
+                // TODO: forward error from remote
+                socket.emit("remoteError", "Could not connect to remote");
+            }
+        });
+
+        /* EC client tells listener to close */
+        socket.on("listenerClose", function() {
+            console.log(logPrefix() + "received listener close request from client");
+            goodbye();
+        });
+    }
+);
+
+// ---
+
+/* make HTTP request to anchor server; returns bool (true if successful, false otherwise) */
 function sendToAnchor(JSONpayload) {
     // TODO: TASKS:
     // TODO:	1: unhardcode port + url
     // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
     // TODO:	3: Encryption?
-    console.log(logTimePrefix() + "attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
+    console.log(logPrefix() + "attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
     const postReq = http.request(remote, function (res) {
-        console.log(logTimePrefix() + "requested accepted by remote");
+        console.log(logPrefix() + "requested accepted by remote");
     });
 
     var success = true;
-
     postReq.on("error", function (err) {
-        const prefix = logTimePrefix();
+        const prefix = logPrefix();
         success = false;
         console.error(prefix + err);
     });
     postReq.write(JSON.stringify(JSONpayload));
     postReq.end();
+    return success;
 };
 
 /* shut server down in a graceful manner */
 function goodbye() {
-    console.log(logTimePrefix() + "listener ending gracefully");
+    console.log(logPrefix() + "listener ending gracefully");
     io.close();
     server.close();
     process.exit(0);
