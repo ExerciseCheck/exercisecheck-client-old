@@ -78,7 +78,10 @@ if(kinect.open()) {
 					var listenerSocket = listener("http://localhost:8001");
                     listenerSocket.emit(
 						'bufferPush',
-						bufferTrial
+						{
+							bodyFrames: bufferBodyFrames,
+							bodyIndex: bodyIndex;
+						}
 					);
 				break;
 
