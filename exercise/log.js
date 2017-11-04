@@ -46,7 +46,7 @@ const logger = {
                 }
             }
 
-            logfile = logConfig.dir + logConfig.prefix + "." + getTime() + ".log";
+            logfile = logConfig.dir + logConfig.pre + "." + getTime() + ".log";
             if (attemptWrite) {
                 fs.openSync(logfile, "a", (err) => {
                     if (err) {
