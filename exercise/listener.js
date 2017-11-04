@@ -10,8 +10,7 @@ const
     io          = require('socket.io')(server),
     bp          = require('body-parser'),
     process     = require('process'),
-    scriptname  = require('path').basename(__filename),
-    logger      = require('./log.js').Logger(scriptname),
+    logger      = require('./log.js').Logger('listener'),
     config      = require('./config.js').listenerConfig;
 
 // TODO: should we keep buffertrials in a queue to hold onto, in case the listener is down?
@@ -110,9 +109,8 @@ function sendToAnchor(JSONpayload) {
 
     var success = true;
     postReq.on("error", function (err) {
-        const prefix = logPrefix();
         success = false;
-        console.error(prefix + err);
+        logger.error(err);
     });
     postReq.write(JSON.stringify(JSONpayload));
     postReq.end();
