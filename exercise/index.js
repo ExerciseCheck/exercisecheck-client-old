@@ -34,8 +34,9 @@ if(kinect.open()) {
 	var startTime, duration;
 	var bodyIndex = -1;
 
-    var listenerSocket = listener("http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
-    logger.log("attempting connection to listener");
+	const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
+    var listenerSocket = listener(listenerLocStr);
+    logger.log("attempting connection to listener at " + listenerLocStr);
 
     listenerSocket.on('connect_timeout', function (timeout) {
     	alert("could not connect to listener");
