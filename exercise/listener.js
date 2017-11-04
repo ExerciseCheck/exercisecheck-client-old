@@ -11,7 +11,7 @@ const
     bp          = require('body-parser'),
     process     = require('process'),
     scriptname  = require('path').basename(__filename),
-    logger      = require('./log.js'),
+    logger      = require('./log.js').Logger(scriptname),
     config      = require('./config.js').listenerConfig;
 
 // TODO: should we keep buffertrials in a queue to hold onto, in case the listener is down?
@@ -43,10 +43,10 @@ process.on("SIGINT", function () {
 // ---
 
 // set the listener up
-server.listen(listenerConfig.port);
-io.path(listenerConfig.path);
+server.listen(config.port);
+io.path(config.path);
 //io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
-logger.log("Ec JSON buffer listener started on localhost:" + listenerConfigport.toString() + listenerConfigpath);
+logger.log("Ec JSON buffer listener started on localhost:" + config.port.toString() + config.path);
 
 var clients = 0;
 /* socket logic */

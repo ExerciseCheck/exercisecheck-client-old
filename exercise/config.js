@@ -2,8 +2,6 @@
  * Configuration
  */
 
-module.exports = config;
-
 const config = {
     // Logger -- log.js
     logConfig: {
@@ -31,3 +29,5 @@ const config = {
         }
     },
 }
+
+module.exports = config;
