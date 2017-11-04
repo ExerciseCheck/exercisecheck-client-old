@@ -43,10 +43,10 @@ process.on("SIGINT", function () {
 // ---
 
 // set the listener up
-server.listen(config.port);
-io.path(config.path);
+server.listen(config.local.port);
+io.path(config.local.path);
 //io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
-logger.log("Ec JSON buffer listener started on localhost:" + config.port.toString() + config.path);
+logger.log("Ec JSON buffer listener started on localhost:" + config.local.port.toString() + config.local.path);
 
 var clients = 0;
 /* socket logic */

@@ -5,12 +5,12 @@
 const
     fs          = require('fs'),
     logConfig   = require('./config.js').logConfig;
-var logfile = undefined;
+var logfile     = undefined;
 
 const
     getTime = () => { return new Date().getTime().toString(); },
     _logPrefix = (app) => { return "[" + getTime() + "] " + app + ": "; },
-    _error = (app, str) => { return _logPrefix(app) + str; };
+    _error = (app, str) => { return console.error(_logPrefix(app) + str); };
 
 const logger = {
     /**
@@ -28,41 +28,55 @@ const logger = {
         }
         var attemptWrite = true;
 
-        // touch logging directory  and log file if neither exist
+        // touch logging directory and log file if neither exist
         if (toFile && !logfile) {
-            // make the logging directory if it does not exist
-            fs.statSync(logConfig.dir, (err) => {
-                if (err) {
-                    _error(app, err);
-                    if (err.code === "ENOENT") {
-                        fs.mkdirSync(logConfig.dir, (err) => {
-                            console.error("LOGGER: " + err);
-                        });
-                    }
-                }
-            });
-            logfile = logConfig.dir + "ec." + getTime() + ".log";
-            fs.openSync(logfile, "a", (err) => {
-                if (err) {
+
+            try {
+                fs.statSync(logConfig.dir);
+            } catch (err) {
+                if (err.code === "ENOENT") {
+                    _error("LOGGER", "mkdir " + logConfig.dir);
+                    fs.mkdirSync(logConfig.dir, (err) => {
+                        _error("LOGGER", err);
+                    });
+                } else {
                     attemptWrite = false;
-                    console.error("LOGGER: could not open file at " + logfile);
-                    console.error("LOGGER: " + err);
+                    _error("LOGGER", "failed to stat " + logConfig.dir + ", error " + err.code);
+                    _error("LOGGER", "will not write to file");
                 }
-            });
-        }
+            }
 
-        // log entry for this logger instance gets a custom prefix based on the name of the app
-        var logPrefix = () => { return _logPrefix(app); };
-
-        var __writeToLog = (logstr) => {
-            if (attemptWrite && toFile) {
-                return fs.appendFileSync(logfile, logstr, "utf8", function (err) {
+            logfile = logConfig.dir + logConfig.prefix + "." + getTime() + ".log";
+            if (attemptWrite) {
+                fs.openSync(logfile, "a", (err) => {
                     if (err) {
-                        console.error("LOGGER: " + err);
+                        attemptWrite = false;
+                        _error("LOGGER", "could not open file at " + logfile);
+                        _error("LOGGER", err);
                     }
                 });
             }
         }
+
+        // log entry for this logger instance gets a custom prefix based on the name of the app
+        const logPrefix = () => { return _logPrefix(app); };
+
+        const __writeToLog = (logstr) => {
+            if (attemptWrite && toFile) {
+                try {
+                    fs.appendFileSync(logfile, logstr, "utf8");
+                } catch (err) {
+                    _error("LOGGER", err);
+
+                    // ENOENT? The log file disappeared somehow!
+                    if (err.code === "ENOENT") {
+                        _error("LOGGER", "the log file has disappeared; will stop attempting to write to file");
+                        attemptWrite = false;
+                        logfile = undefined;
+                    };
+                }
+            }
+        };
 
         this.log = (str) => {
             const logstr = logPrefix() + str.toString();
