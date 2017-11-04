@@ -52,9 +52,9 @@ const logger = {
         }
 
         // log entry for this logger instance gets a custom prefix based on the name of the app
-        this.logPrefix = () => { return _logPrefix(app); };
+        var logPrefix = () => { return _logPrefix(app); };
 
-        __writeToLog = (logstr) => {
+        var __writeToLog = (logstr) => {
             if (attemptWrite && toFile) {
                 return fs.appendFileSync(logfile, logstr, "utf8", function (err) {
                     if (err) {
@@ -65,7 +65,7 @@ const logger = {
         }
 
         this.log = (str) => {
-            const logstr = this.logPrefix() + str.toString();
+            const logstr = logPrefix() + str.toString();
             __writeToLog(logstr + '\n');
             if (toOut) {
                 console.log(logstr);
@@ -73,7 +73,7 @@ const logger = {
         };
 
         this.error = (str) => {
-            const logstr = this.logPrefix() + str.toString();
+            const logstr = logPrefix() + str.toString();
             __writeToLog(logstr + '\n');
             if (toOut) {
                 console.error(logstr);
