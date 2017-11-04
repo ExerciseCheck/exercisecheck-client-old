@@ -9,7 +9,7 @@ var logfile = undefined;
 
 const
     getTime = () => { return new Date().getTime().toString(); },
-    _logPrefix = (app) => { return "[" + app + " " + getTime() + "] "; },
+    _logPrefix = (app) => { return "[" + getTime() + "] " + app + ": "; },
     _error = (app, str) => { return _logPrefix(app) + str; };
 
 const logger = {
@@ -41,7 +41,7 @@ const logger = {
                     }
                 }
             });
-            logfile = logConfig.dir + app.toString() + "." + getTime() + ".log";
+            logfile = logConfig.dir + "ec." + getTime() + ".log";
             fs.openSync(logfile, "a", (err) => {
                 if (err) {
                     attemptWrite = false;
@@ -54,7 +54,7 @@ const logger = {
         // log entry for this logger instance gets a custom prefix based on the name of the app
         this.logPrefix = () => { return _logPrefix(app); };
 
-        this.__writeToLog = function (logstr) {
+        __writeToLog = (logstr) => {
             if (attemptWrite && toFile) {
                 return fs.appendFileSync(logfile, logstr, "utf8", function (err) {
                     if (err) {
@@ -64,28 +64,26 @@ const logger = {
             }
         }
 
-        this.log = function (str) {
+        this.log = (str) => {
             const logstr = this.logPrefix() + str.toString();
-            this.__writeToLog(logstr + '\n');
+            __writeToLog(logstr + '\n');
             if (toOut) {
                 console.log(logstr);
             }
         };
 
-        this.error = function (str) {
+        this.error = (str) => {
             const logstr = this.logPrefix() + str.toString();
-            this.__writeToLog(logstr + '\n');
+            __writeToLog(logstr + '\n');
             if (toOut) {
                 console.error(logstr);
             }
         };
 
-        this.close = function () {
+        this.close =  () => {
             attemptWrite = false;
             logfile = undefined;
         };
-
-        this.logloc = () => { return logfile };
 
         return this;
     }
