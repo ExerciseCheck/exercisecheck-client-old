@@ -3,44 +3,21 @@
  */
 
 const
-    http    = require("http"),
-    express = require("express"),
-    app     = express(),
-    server  = require('http').Server(app),
-    io      = require('socket.io')(server),
-    bp      = require('body-parser'),
-    process = require('process');
+    http        = require("http"),
+    express     = require("express"),
+    app         = express(),
+    server      = require('http').Server(app),
+    io          = require('socket.io')(server),
+    bp          = require('body-parser'),
+    process     = require('process'),
+    scriptname  = require('path').basename(__filename),
+    logger      = require('./log.js'),
+    config      = require('./config.js').listenerConfig;
 
-/* Listener configs */
-const
-    listenerPort = 8001,
-    keepAliveTimeout = 5000,
-    path = "/";
+// TODO: should we keep buffertrials in a queue to hold onto, in case the listener is down?
+const bufferQueue = [];
 
-// TODO: do we need to keep buffertrials in a queue?
-const
-    bufferQueue = [];
-
-// remote server receiving HTTP(S) POST requests
-const
-    remote = {
-        method: "POST",
-        host: "localhost",
-        port: "9001",
-        path: "/api/refexercises",
-        headers: {
-            'Content-Type': 'application/json',
-        }
-    };
-
-/* logging, time utils */
-// TODO: refactor logging utils into separate file log.js
-const
-    scriptname = require('path').basename(__filename);
-
-const
-    getTime = () => { return new Date().getTime().toString(); },
-    logPrefix = () => { return "[" + scriptname + " " + getTime() + "] " };
+const remote = config.remote;
 
 // ---
 
@@ -58,7 +35,7 @@ if (process.platform === "win32") {
 
 /* Quit gracefully on a keyboard interrupt */
 process.on("SIGINT", function () {
-        console.log(logPrefix() + "received SIGINT; attempting graceful shutdown");
+        logger.log("received SIGINT; attempting graceful shutdown");
         goodbye();
     }
 );
@@ -66,33 +43,33 @@ process.on("SIGINT", function () {
 // ---
 
 // set the listener up
-server.listen(listenerPort);
-io.path(path);
+server.listen(listenerConfig.port);
+io.path(listenerConfig.path);
 //io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
-console.log(logPrefix() + "Ec JSON buffer listener started on localhost:" + listenerPort.toString() + path);
+logger.log("Ec JSON buffer listener started on localhost:" + listenerConfigport.toString() + listenerConfigpath);
 
 var clients = 0;
 /* socket logic */
 io.on("connection", function (socket) {
-        console.log(logPrefix() + "received connection");
+        logger.log("received connection");
 
         /* Process and verify client initialization request */
         socket.on("clientInit", function () {
-           console.log(logPrefix() + "received init request from client");
+           logger.log("received init request from client");
 
            // limit number of connections to 1
            if (++clients > 1) {
-               console.error(logPrefix() + "dropping connection attempted since EC is already connected to this socket");
+               logger.error("dropping connection attempted since EC is already connected to this socket");
                socket.disconnect();
            } else {
-               console.log(logPrefix() + "accepting connection, sending serverHello back");
+               logger.log("accepting connection, sending serverHello back");
                socket.emit("serverHello");
            };
         });
 
         /* Close a connection on goodbye */
         socket.on("clientGoodbye", function (bye) {
-            console.log(logPrefix() + "client disconnected");
+            logger.log("client disconnected");
             clients = Math.max(--clients, 0);
             socket.emit("serverGoodbye");
             socket.disconnect();
@@ -101,7 +78,7 @@ io.on("connection", function (socket) {
         /* Receive a buffer from the patient */
         socket.on("bufferPush", function (patientBuffer) {
             // TODO: verify JSON?
-            console.log(logPrefix() + "buffer received");
+            logger.log("buffer received");
 
             /* write to anchor; on fail, inform EC client contact has failed */
             if (!sendToAnchor(patientBuffer)) {
@@ -112,7 +89,7 @@ io.on("connection", function (socket) {
 
         /* EC client tells listener to close */
         socket.on("listenerClose", function() {
-            console.log(logPrefix() + "received listener close request from client");
+            logger.log("received listener close request from client");
             goodbye();
         });
     }
@@ -126,9 +103,9 @@ function sendToAnchor(JSONpayload) {
     // TODO:	1: unhardcode port + url
     // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
     // TODO:	3: Encryption?
-    console.log(logPrefix() + "attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
+    logger.log("attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
     const postReq = http.request(remote, function (res) {
-        console.log(logPrefix() + "requested accepted by remote");
+        logger.log("requested accepted by remote");
     });
 
     var success = true;
@@ -144,7 +121,7 @@ function sendToAnchor(JSONpayload) {
 
 /* shut server down in a graceful manner */
 function goodbye() {
-    console.log(logPrefix() + "listener ending gracefully");
+    logger.log("listener ending gracefully");
     io.close();
     server.close();
     process.exit(0);
