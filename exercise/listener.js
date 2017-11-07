@@ -41,86 +41,91 @@ process.on("SIGINT", function () {
 
 // ---
 
-// set the listener up
-server.listen(config.local.port);
-io.path(config.local.path);
-//io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
-logger.log("Ec JSON buffer listener started on localhost:" + config.local.port.toString() + config.local.path);
+const Listener = {
+    listener: () => {
+        // set the listener up
+        server.listen(config.local.port);
+        io.path(config.local.path);
+        //io.origins(['localhost:8000']); // TODO: enforce localhost origin @ 8000?
+        logger.log("Ec JSON buffer listener started on localhost:" + config.local.port.toString() + config.local.path);
 
-var clients = 0;
-/* socket logic */
-io.on("connection", function (socket) {
-        logger.log("received connection");
+        var clients = 0;
+        /* socket logic */
+        io.on("connection", function (socket) {
+            logger.log("received connection");
 
-        /* Process and verify client initialization request */
-        socket.on("clientInit", function () {
-           logger.log("received init request from client");
+            /* Process and verify client initialization request */
+            socket.on("clientInit", function () {
+                logger.log("received init request from client");
 
-           // limit number of connections to 1
-           if (++clients > 1) {
-               logger.error("dropping connection attempted since EC is already connected to this socket");
-               socket.disconnect();
-           } else {
-               logger.log("accepting connection, sending serverHello back");
-               socket.emit("serverHello");
-           };
+                // limit number of connections to 1
+                if (++clients > 1) {
+                    logger.error("dropping connection attempted since EC is already connected to this socket");
+                    socket.disconnect();
+                } else {
+                    logger.log("accepting connection, sending serverHello back");
+                    socket.emit("serverHello");
+                }
+            });
+
+            /* Close a connection on goodbye */
+            socket.on("clientGoodbye", function (bye) {
+                logger.log("client disconnected");
+                clients = Math.max(--clients, 0);
+                socket.emit("serverGoodbye");
+                socket.disconnect();
+            });
+
+            /* Receive a buffer from the patient */
+            socket.on("bufferPush", function (patientBuffer) {
+                // TODO: verify JSON?
+                logger.log("buffer received");
+
+                /* write to anchor; on fail, inform EC client contact has failed */
+                if (!sendToAnchor(patientBuffer)) {
+                    // TODO: forward error from remote
+                    socket.emit("remoteError", "Could not connect to remote");
+                }
         });
 
-        /* Close a connection on goodbye */
-        socket.on("clientGoodbye", function (bye) {
-            logger.log("client disconnected");
-            clients = Math.max(--clients, 0);
-            socket.emit("serverGoodbye");
-            socket.disconnect();
+            /* EC client tells listener to close */
+            socket.on("listenerClose", function () {
+                logger.log("received listener close request from client");
+                goodbye();
+            });
         });
 
-        /* Receive a buffer from the patient */
-        socket.on("bufferPush", function (patientBuffer) {
-            // TODO: verify JSON?
-            logger.log("buffer received");
+        // ---
 
-            /* write to anchor; on fail, inform EC client contact has failed */
-            if (!sendToAnchor(patientBuffer)) {
-                // TODO: forward error from remote
-                socket.emit("remoteError", "Could not connect to remote");
-            }
-        });
+        /* make HTTP request to anchor server; returns bool (true if successful, false otherwise) */
+        function sendToAnchor(JSONpayload) {
+            // TODO: TASKS:
+            // TODO:	1: unhardcode port + url
+            // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
+            // TODO:	3: Encryption?
+            logger.log("attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path);
+            const postReq = http.request(remote, function (res) {
+                logger.log("requested accepted by remote");
+            });
 
-        /* EC client tells listener to close */
-        socket.on("listenerClose", function() {
-            logger.log("received listener close request from client");
-            goodbye();
-        });
-    }
-);
+            var success = true;
+            postReq.on("error", function (err) {
+                success = false;
+                logger.error(err);
+            });
+            postReq.write(JSON.stringify(JSONpayload));
+            postReq.end();
+            return success;
+        };
 
-// ---
-
-/* make HTTP request to anchor server; returns bool (true if successful, false otherwise) */
-function sendToAnchor(JSONpayload) {
-    // TODO: TASKS:
-    // TODO:	1: unhardcode port + url
-    // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
-    // TODO:	3: Encryption?
-    logger.log("attempting " + remote.method + " to remote at " + remote.host + ":" + remote.port + remote.path );
-    const postReq = http.request(remote, function (res) {
-        logger.log("requested accepted by remote");
-    });
-
-    var success = true;
-    postReq.on("error", function (err) {
-        success = false;
-        logger.error(err);
-    });
-    postReq.write(JSON.stringify(JSONpayload));
-    postReq.end();
-    return success;
-};
-
-/* shut server down in a graceful manner */
-function goodbye() {
-    logger.log("listener ending gracefully");
-    io.close();
-    server.close();
-    process.exit(0);
+        /* shut server down in a graceful manner */
+        function goodbye() {
+            logger.log("listener ending gracefully");
+            io.close();
+            server.close();
+            process.exit(0);
+        };
+    },
 }
+
+module.exports = Listener;

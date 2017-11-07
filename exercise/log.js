@@ -12,6 +12,57 @@ const
     _logPrefix = (app) => { return "[" + getTime() + "] " + app + ": "; },
     _error = (app, str) => { return console.error(_logPrefix(app) + str); };
 
+// ---
+
+function loggerBase(app, toOut, toFile, attemptWrite) {
+
+    this.app = app;
+    this.toOut = toOut;
+    this.toFile = toFile;
+    this.attemptWrite = attemptWrite;
+
+    // log entry for this logger instance gets a custom prefix based on the name of the app
+    const logPrefix = () => { return _logPrefix(app); };
+
+    const __writeToLog = (logstr) => {
+        if (attemptWrite && toFile) {
+            try {
+                fs.appendFileSync(logfile, logstr, "utf8");
+            } catch (err) {
+                _error("LOGGER", err);
+
+                // ENOENT? The log file disappeared somehow!
+                if (err.code === "ENOENT") {
+                    _error("LOGGER", "the log file has disappeared; will stop attempting to write to file");
+                    attemptWrite = false;
+                    logfile = undefined;
+                };
+            }
+        }
+    };
+
+    this.log = (str) => {
+        const logstr = logPrefix() + str.toString();
+        __writeToLog(logstr + '\n');
+        if (toOut) {
+            console.log(logstr);
+        }
+    };
+
+    this.error = (str) => {
+        const logstr = logPrefix() + str.toString();
+        __writeToLog(logstr + '\n');
+        if (toOut) {
+            console.error(logstr);
+        }
+    };
+
+    this.close =  () => {
+        attemptWrite = false;
+        logfile = undefined;
+    };
+};
+
 const logger = {
     /**
      * a generic logger
@@ -58,48 +109,7 @@ const logger = {
             }
         }
 
-        // log entry for this logger instance gets a custom prefix based on the name of the app
-        const logPrefix = () => { return _logPrefix(app); };
-
-        const __writeToLog = (logstr) => {
-            if (attemptWrite && toFile) {
-                try {
-                    fs.appendFileSync(logfile, logstr, "utf8");
-                } catch (err) {
-                    _error("LOGGER", err);
-
-                    // ENOENT? The log file disappeared somehow!
-                    if (err.code === "ENOENT") {
-                        _error("LOGGER", "the log file has disappeared; will stop attempting to write to file");
-                        attemptWrite = false;
-                        logfile = undefined;
-                    };
-                }
-            }
-        };
-
-        this.log = (str) => {
-            const logstr = logPrefix() + str.toString();
-            __writeToLog(logstr + '\n');
-            if (toOut) {
-                console.log(logstr);
-            }
-        };
-
-        this.error = (str) => {
-            const logstr = logPrefix() + str.toString();
-            __writeToLog(logstr + '\n');
-            if (toOut) {
-                console.error(logstr);
-            }
-        };
-
-        this.close =  () => {
-            attemptWrite = false;
-            logfile = undefined;
-        };
-
-        return this;
+        return new loggerBase(app, toOut, toFile, attemptWrite);
     }
 };
 

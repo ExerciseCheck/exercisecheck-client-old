@@ -18,7 +18,7 @@ if(kinect.open()) {
 	// Server Initiation
 	server.listen(config.port);
 	logger.log('Server listening on port ' + config.port);
-	app.use(express.static('public'));
+	app.use(express.static(__dirname + '/public'));
 
 	// Initiation
 
@@ -34,7 +34,15 @@ if(kinect.open()) {
 	var startTime, duration;
 	var bodyIndex = -1;
 
+	// location of the listener
 	const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
+
+	// initialize listener if we need to
+	if (config.localListener) {
+		logger.log("starting local listener at " + listenerLocStr);
+		const listener = require('./listener.js').listener();
+	}
+
     var listenerSocket = listener(listenerLocStr);
     logger.log("attempting connection to listener at " + listenerLocStr);
 
