@@ -57,21 +57,17 @@ $(document).ready(function () {
     document.getElementById("display").style.display = 'none';
   });
 
-  // Functions
-
-  function drawCircle(x, y, r, color){ // Not used in current code
-    ctx1.beginPath();
-    ctx1.strokeStyle=color;
-    ctx1.arc(x, y,r,0,Math.PI*2);
-    ctx1.stroke();
-  }
 
   function drawBody(body){
-    //drawCircle(50, 50, 10, "green");
     jointType = [7,6,5,4,2,8,9,10,11,10,9,8,2,3,2,1,0,12,13,14,15,14,13,12,0,16,17,18,19] //re visit and draw in a line
     jointType.forEach(function(jointType){
       drawJoints(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
     });
+    
+    // Example of hand raising exercise.
+    var gt_y_test = 250;
+    draw_height_line(body.joints[8].depthX * width, gt_y_test, body.joints[11].depthY*height);
+    
     drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
 
     ctx1.beginPath();
@@ -93,7 +89,9 @@ $(document).ready(function () {
       ctx1.fillStyle = "yellow";
       ctx1.fill();
   }
-  // Draw Center Circle in ctx1 (canvasSKLT)
+
+
+  // Draw center circle - to help user position themselves
   function drawCenterCircle(x, y, r, nx, ny){
     ctx1.beginPath();
     if(nx > x-r && nx < x+r && ny > y-r && ny < y+r)
@@ -108,10 +106,27 @@ $(document).ready(function () {
   }
 
 
+  // Line to indicate user reaching some standard or requirement
+  // Input is start of line, ground truth height, exercise height
+  // Line is yellow if requirement unfulfilled, green if fulfilled
+  
+  function draw_height_line(starting_x, gt_y, ex_y){
+     ctx1.beginPath();
+    if (hand_y < gt_y){
+      ctx1.strokeStyle = "green";
+    }else{
+      ctx1.strokeStyle = "yellow";
+    }
+
+    ctx1.moveTo(shoulder_x, gt_y);
+    ctx1.lineTo(width, gt_y);
+    ctx1.stroke();
+    ctx1.closePath();
+    ctx1.strokeStyle = "black";
+  }
+
   function liveupdateCanvas1(bodyFrame, tracingID){
     ctx1.clearRect(0, 0, width, height);
-    //drawCircle(ctx1, 50, 50, 10, "red"); removed if following code line works
-    //drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
     if (tracingID == -1){
       bodyFrame.bodies.some(function(body){
         if(body.tracked){ drawBody(body); return(body.tracked);}
