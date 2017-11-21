@@ -80,6 +80,9 @@ const Listener = {
             socket.on("bufferPush", function (patientBuffer) {
                 // TODO: verify JSON?
                 logger.log("buffer received");
+                if (config.logBuffer) {
+                    logger.log(JSON.stringify(patientBuffer));
+                }
 
                 /* write to anchor; on fail, inform EC client contact has failed */
                 if (!sendToAnchor(patientBuffer)) {

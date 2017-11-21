@@ -42,9 +42,9 @@ const config = {
         // describe the port and path where the listener can expect input
         local: {
             hostname: "localhost",
-            port: 8001,
+            port: "8001",
             path: "/",
-            keepAliveTimeout: 5000,
+            keepAliveTimeout: "5000",
         },
 
         // remote server receiving HTTP(S) POST requests
@@ -56,7 +56,10 @@ const config = {
             headers: {
                 'Content-Type': 'application/json',
             }
-        }
+        },
+
+        // should I log the buffers I receive? (default: false; they can get pretty big)
+        logBuffer: false
     },
 };
 
