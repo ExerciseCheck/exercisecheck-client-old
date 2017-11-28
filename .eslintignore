@@ -1,0 +1,4 @@
+node_modules/*
+exericse/node_modules/*
+.idea/
+exercise/public/*
