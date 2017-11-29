@@ -6,7 +6,7 @@
 
 const fs          = require('fs');
 const logConfig   = require('./config.js').logConfig;
-const logfile     = undefined;
+var logfile     = undefined;
 
 /* private helper functions */
 
@@ -24,7 +24,7 @@ const _error = (app, str) => {
 
 // ---
 
-const loggerBase = (app, toOut, toFile, attemptWrite) => {
+function loggerBase(app, toOut, toFile, attemptWrite) {
   this.app = app;
   this.toOut = toOut;
   this.toFile = toFile;
