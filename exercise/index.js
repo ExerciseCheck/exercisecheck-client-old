@@ -3,10 +3,9 @@ var Kinect2 = require('kinect2'),
 	app = express(),
 	server = require('http').createServer(app),
 	io = require('socket.io').listen(server),
-	listener = require('socket.io-client'),
 	logger = require("./log.js").Logger("client"),
 	config = require("./config.js").clientConfig,
-	listenerLocation = config.getListener(),
+    listenerConfig = require("./config.js").listenerConfig,
 	XLSX = require('xlsx');
 const fs = require('fs');
 
@@ -34,169 +33,142 @@ if(kinect.open()) {
 	var startTime, duration;
 	var bodyIndex = -1;
 
-	// location of the listener
-	const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
+    logger.log('system init state');
+    kinect.openBodyReader();
 
-	// initialize listener if we need to
-	if (config.localListener) {
-		logger.log("starting local listener at " + listenerLocStr);
-		const listener = require('./listener.js').listener();
-	}
+    // Connection On:
+    io.on('connection', function (socket) {
+        ++clients;
+        logger.log('a user connected');
+        // systemState could be 0..3 during connection event, but only 2 needs signal emission
+        if (systemState == 2) {
+            socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+        }
 
-    var listenerSocket = listener(listenerLocStr);
-    logger.log("attempting connection to listener at " + listenerLocStr);
+        // State Transition controlled by the client's command
+        socket.on('command', function () {
+            systemState = StateTrans(systemState);
+            switch (systemState) { // During the transition, prepare the buffer
+                case 1: // 0->1 or 3->1 Get ready for recording
+                    activityLabeled = false;
+                    bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
+                    bufferBodyFrames = [];
+                    logger.log('System in Recording state');
+                    startTime = new Date().getTime();
+                    break;
 
-    listenerSocket.on('connect_timeout', function (timeout) {
-    	alert("could not connect to listener");
-    	logger.error("could not connect to listener");
-	});
+                case 2: // 1->2, Push the BodyFrames Data to the current trial
+                    duration = ((new Date().getTime() - startTime) / 1000).toFixed(2);
+                    kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
+                    bufferBodyFrames.durationsecs = duration;
+                    bufferBodyFrames.duration = duration.toString();
+                    bufferBodyFrames.bodyIndex = bodyIndex;
+                    bodyIndex = -1;
+                    bufferTrial.push(bufferBodyFrames);
+                    logger.log('system in Result Display state'); // Action
+                    socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
+                    socket.broadcast.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+                    //
+                    // push buffer trial to server
+                    //
 
-    listenerSocket.emit("clientInit");
+                    // TODO: TASKS:
+                    // TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
+                    // TODO:	2: Encryption?
+                    const postReq = require('http').request(listenerConfig.remote, (res) => {
+                        logger.log('requested accepted by remote');
+                    });
 
-    listenerSocket.on("serverHello", function () {
-    	logger.log("received hello from listener");
-        logger.log('system init state');
-        kinect.openBodyReader();
+                    postReq.on('error', (err) => {
+                      logger.error(err);
+                    });
+                    postReq.write(JSON.stringify({bodyFrames: bufferBodyFrames}));
+                    postReq.end();
 
-        // Connection On:
-        io.on('connection', function (socket) {
-            ++clients;
-            logger.log('a user connected');
-            // systemState could be 0..3 during connection event, but only 2 needs signal emission
-            if (systemState == 2) {
-                socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+                    break;
+
+                case 0: // 2->0, get the system from Result Disp to Live state.
+                    kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
+                    logger.log('system in Live state');
+                default:
             }
-
-            // State Transition controlled by the client's command
-            socket.on('command', function () {
-                systemState = StateTrans(systemState);
-                switch (systemState) { // During the transition, prepare the buffer
-                    case 1: // 0->1 or 3->1 Get ready for recording
-                        activityLabeled = false;
-                        bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
-                        bufferBodyFrames = [];
-                        logger.log('System in Recording state');
-                        startTime = new Date().getTime();
-                        break;
-
-                    case 2: // 1->2, Push the BodyFrames Data to the current trial
-                        duration = ((new Date().getTime() - startTime) / 1000).toFixed(2);
-                        kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
-                        bufferBodyFrames.durationsecs = duration;
-                        bufferBodyFrames.duration = duration.toString();
-                        bufferBodyFrames.bodyIndex = bodyIndex;
-                        bodyIndex = -1;
-                        bufferTrial.push(bufferBodyFrames);
-                        logger.log('system in Result Display state'); // Action
-                        socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
-                        socket.broadcast.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
-                        //
-                        // push buffer trial to server
-                        //
-
-                        // TODO: TASKS:
-                        // TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
-                        // TODO:	2: Encryption?
-                        logger.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
-                        logger.log('attempting to make contact with listener at ' + "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
-                        listenerSocket.emit(
-                            'bufferPush',
-                            {
-                                bodyFrames: bufferBodyFrames
-                            }
-                        );
-                        // TODO: doesn't work... why?
-                        listenerSocket.on("remoteError", function (msg) {
-                                alert("Oh no! " + msg);
-                                console.err(msg);
-                            }
-                        );
-                        break;
-
-                    case 0: // 2->0, get the system from Result Disp to Live state.
-                        kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
-                        logger.log('system in Live state');
-                    default:
+        });
+        // Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
+        socket.on('dataLabelFromClient', function (num) { // label reference, exercise or discard
+            testID = bufferTrial.length - 1;
+            if (gtArray[gtArray.length - 1] == testID) {
+                gtArray.pop();
+            }
+            if (exArray[exArray.length - 1] == testID) {
+                exArray.pop();
+            }
+            if (num == 1) {
+                gtArray.push(testID);
+            }
+            else {
+                if (num == 2) {
+                    exArray.push(testID);
                 }
-            });
-            // Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
-            socket.on('dataLabelFromClient', function (num) { // label reference, exercise or discard
-                testID = bufferTrial.length - 1;
-                if (gtArray[gtArray.length - 1] == testID) {
-                    gtArray.pop();
-                }
-                if (exArray[exArray.length - 1] == testID) {
-                    exArray.pop();
-                }
-                if (num == 1) {
-                    gtArray.push(testID);
-                }
-                else {
-                    if (num == 2) {
-                        exArray.push(testID);
-                    }
-                }
-                activityLabeled = true;
-                socket.emit('serverDataLabeled');
-                socket.broadcast.emit('serverDataLabeled');
-            })
+            }
+            activityLabeled = true;
+            socket.emit('serverDataLabeled');
+            socket.broadcast.emit('serverDataLabeled');
+        })
 
-            socket.on('analyze', function () {
-                logger.log('analyze signal received!');
-                var chartData = chartAnalyze(bufferTrial, gtArray, exArray);
-                var barData = barAnalyze(bufferTrial, gtArray, exArray);
-                socket.emit('report', chartData, barData, gtArray, exArray);
-            });
+        socket.on('analyze', function () {
+            logger.log('analyze signal received!');
+            var chartData = chartAnalyze(bufferTrial, gtArray, exArray);
+            var barData = barAnalyze(bufferTrial, gtArray, exArray);
+            socket.emit('report', chartData, barData, gtArray, exArray);
+        });
 
-            socket.on('saveRequest', function (filename) {
-                save2xlsx(bufferTrial, gtArray, exArray, filename);
-            });
+        socket.on('saveRequest', function (filename) {
+            save2xlsx(bufferTrial, gtArray, exArray, filename);
+        });
 
-            socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
-                var curveData = curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype);
-                socket.emit('curveResult', curveData);
-            });
+        socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
+            var curveData = curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype);
+            socket.emit('curveResult', curveData);
+        });
 
-            // States
-            kinect.on('bodyFrame', function (bodyFrame) {
-                switch (systemState) {
-                    case 1: //recording: save the data being recorded, give identification to client
-                        socket.emit('rec', bodyFrame, systemState, bodyIndex);
-                        socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
-                        bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
-                        break;
+        // States
+        kinect.on('bodyFrame', function (bodyFrame) {
+            switch (systemState) {
+                case 1: //recording: save the data being recorded, give identification to client
+                    socket.emit('rec', bodyFrame, systemState, bodyIndex);
+                    socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
+                    bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
+                    break;
 
-                    case 2: //display
-                        logger.log('system in display state, but system is streaming. Something wrong here.');
-                        break;
+                case 2: //display
+                    logger.log('system in display state, but system is streaming. Something wrong here.');
+                    break;
 
-                    case 0: //live
-                        bufferBodyFrames = [];
-                        bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
-                        socket.emit('live', bodyFrame, systemState)
-                        socket.broadcast.emit('live', bodyFrame, systemState);
-                        break;
+                case 0: //live
+                    bufferBodyFrames = [];
+                    bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
+                    socket.emit('live', bodyFrame, systemState)
+                    socket.broadcast.emit('live', bodyFrame, systemState);
+                    break;
 
-                    case 3: //3 init
-                        bufferBodyFrames = [];
-                        bufferBodyFrames.push(bodyFrame);
-                        socket.emit('init', bodyFrame, systemState);
-                        socket.broadcast.emit('init', bodyFrame, systemState);
-                        break;
+                case 3: //3 init
+                    bufferBodyFrames = [];
+                    bufferBodyFrames.push(bodyFrame);
+                    socket.emit('init', bodyFrame, systemState);
+                    socket.broadcast.emit('init', bodyFrame, systemState);
+                    break;
 
-                    default:
-                        logger.log('System State unknown');
-                }//end of switch
-            }); // end of kinect.on('bodyframe',function)
+                default:
+                    logger.log('System State unknown');
+            }//end of switch
+        }); // end of kinect.on('bodyframe',function)
 
-            // disconnect
-            socket.on('disconnect', function () {
-                logger.log('a user disconnect');
-                listenerSocket.emit("clientGoodbye");
-                --clients;
-            })
-        }); // end of io.on('connection',function)
-    });
+        // disconnect
+        socket.on('disconnect', function () {
+            logger.log('a user disconnect');
+            --clients;
+        })
+    }); // end of io.on('connection',function)
 }//end of kinect.open()
 
 

@@ -54,7 +54,7 @@ const config = {
     // remote server receiving HTTP(S) POST requests
     remote: {
       method: 'POST',
-      host: 'localhost',
+      host: 'sail.bu.edu',
       port: '9001',
       path: '/api/refexercises',
       headers: {
