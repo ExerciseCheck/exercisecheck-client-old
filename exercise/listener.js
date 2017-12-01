@@ -59,7 +59,7 @@ const Listener = {
         logger.log('received init request from client');
 
         // limit number of connections to 1
-        if (++clients > 1) {
+        if (config.limit > 0 && ++clients > 1) {
           logger.error('dropping connection attempted since EC is already connected to this socket');
           socket.disconnect();
         }

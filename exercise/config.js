@@ -17,7 +17,7 @@ const config = {
 
     // location of listener if not on localhost
     listener: {
-      hostname: NaN,
+      hostname: NaN, 
       port: NaN,
       path: NaN,
       keepAliveTimeout: NaN
@@ -63,7 +63,10 @@ const config = {
     },
 
     // should I log the buffers I receive? (default: false; they can get pretty big)
-    logBuffer: false
+    logBuffer: false,
+
+    // should I enforce a connection limit policy (default: 0, i.e. no limit)
+    limit: 0
   }
 };
 
