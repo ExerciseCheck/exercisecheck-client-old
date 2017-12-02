@@ -45,8 +45,8 @@ const config = {
   listenerConfig: {
     // describe the port and path where the listener can expect input
     local: {
-      hostname: 'localhost',
-      port: '8001',
+      hostname: 'sail.bu.edu',
+      port: '8005',
       path: '/',
       keepAliveTimeout: '5000'
     },

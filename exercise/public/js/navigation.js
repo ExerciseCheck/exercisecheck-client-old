@@ -2,7 +2,7 @@ $(document).ready(function () {
   //state button
   $("#command").click(function () {
     if (clientActive){
-      socket.emit('command');
+      socket.emit('command',window.localStorage.getItem("token"));
       clientActive = false; // lock the client until server responds
     }
   });
@@ -17,6 +17,10 @@ $(document).ready(function () {
 
   $("#re").click(function () {
     socket.emit('dataLabelFromClient', 3);
+  });
+
+  $("#sendGT").click(function () {
+    // socket.emit('sendGT');
   });
 
   $("#report").click(function () {

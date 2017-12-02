@@ -18,33 +18,72 @@
 
 </head>
 
-<body align = "center">
-	<h1 align="center">ExerciseCheck</h1>
-	<div id="vid-box" class="ui-widget-content">
-	</div>
-	<hr>
-	<!--button definition-->
-	<div>
-		<!-- <input id="exercise" class="button-shadow" type="button" value="Exercise"/> -->
-			<input id="command" class="button-shadow" type="button" value="Start"/>
-			<input id="report" class="button-shadow" type="button"  value="Report"/>
-			<input id="chat" class="button-shadow" type="button"  value="Chat"/>
-			<!-- <input id="clr" class="button-shadow" type="button" value="Clear"/> -->
-	</div>
-	<br>
-	<div id = "display">
-<input id ="gt" class="button-shadow-small" type="button"  value="Reference"/>
-<input id = "ex" class = "button-shadow-small" type="button" value="Exercise"/>
-<input id = "re" class= "button-shadow-small" type="button" value = "Discard"/>
-	</div>
-	<br>
 
-	<br>
+<!-- begin Main -->
+<main role="main" aria-label="main section" id="main-content">
+	<!--Your custom code goes here-->
+	<div class="addressBox login-container" id="contactForm">
+		<h4 class="center">Welcome Back!</h4>
+		<div class="clearfix feedbackMSG1"></div>
+		<div class="contact">
+			<form id="formID">
+				<div class="form-group">
+					<label class="form_label required" for="emailReady">Email:</label>
+					<input id="emailReady" class="form-control" type="email" name="email" required>
+				</div>
+				<div class="form-group">
+					<label for="passReady" class="form_label required">Password</label>
+					<input type="password" name="password" required class="form-control" id="passReady">
+				</div>
+				<button id="submitButton" data-style="slide-left" data-color="blue"
+						class="btn btn-primary ladda-button"><span class="ladda-label">Login</span></button>
+			</form>
+		</div>
+	</div>
+	<div class="form-group center marginTop40">
+		Don't have an account yet? <a href="http://sail.bu.edu:9001/signup">Please sign up</a>
+	</div>
 
-	<canvas id="bodyCanvas" width="700" height="700"></canvas>
-	<script src="/socket.io/socket.io.js"></script>
-	<script src="js/kinect.js"></script>
-	<script src="js/navigation.js"></script>
+</main>
 
-</body>
+<a href="exercise.html">Launch Exercise Window</a>
 </html>
+
+<script>
+	$(function () {
+
+		function submitHandler(e) {
+			e.preventDefault();
+
+			var form = $("#emailReady")[0];
+			//look at jquery for form handling and change the way value is obtained
+			var usnm = form.value;
+			var form2 = $("#passReady")[0];
+			var pass = form2.value;
+			$.ajax({
+				type: 'POST',
+				url: "http://sail.bu.edu:9001/api/login",
+				data: {
+					username: usnm,
+					password: pass
+				},
+				dataType: "json",
+				success: function (data) {
+					alert("Login success!");
+					console.log(data);
+					localStorage.setItem('token', data.authHeader); // write
+					console.log(localStorage.getItem('token')); // read
+					window.location  = "exercise.html";
+				},
+				error: function (request, status, error) {
+					var reply = request.responseText;
+					var replyText = (JSON.parse(reply));
+					alert(replyText.message);
+				}
+			});
+		}
+
+		var form = $('#submitButton').bind('click', submitHandler);
+
+	});
+</script>
