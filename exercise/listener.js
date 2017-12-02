@@ -92,7 +92,7 @@ const Listener = {
       /* EC client tells listener to close */
       socket.on('listenerClose', () => {
         logger.log('received listener close request from client');
-        Listener.goodbye();
+        this.goodbye();
       });
     });
 

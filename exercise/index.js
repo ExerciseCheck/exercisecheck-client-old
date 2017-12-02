@@ -3,12 +3,16 @@ var Kinect2 = require('kinect2'),
     app = express(),
     server = require('http').createServer(app),
     io = require('socket.io').listen(server),
-    listener = require('socket.io-client'),
+    listenerSocketOpener = require('socket.io-client'),
     logger = require("./log.js").Logger("client"),
     config = require("./config.js").clientConfig,
     listenerLocation = config.getListener(),
     XLSX = require('xlsx');
 const fs = require('fs');
+
+
+// location of the listener
+const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
 
 var timeout = 3000;
 
@@ -28,22 +32,19 @@ if(kinect.open()) {
 
     // Data Storage, global variables in server
     var	bufferTrial= [], // trial is a number of activities, including ground truth (gt) and exercises
-        bufferBodyFrames =[], gtArray = [], exArray = [];
+        bufferBodyFrames = [], gtArray = [], exArray = [];
 
     // Start Time for the test
     var startTime, duration;
     var bodyIndex = -1;
 
-    // location of the listener
-    const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
-
     // initialize listener if we need to
     if (config.localListener) {
         logger.log("starting local listener at " + listenerLocStr);
-        const listener = require('./listener.js').listener();
+        listener = require('./listener.js').listener();
     }
 
-    var listenerSocket = listener(listenerLocStr);
+    var listenerSocket = listenerSocketOpener(listenerLocStr);
     logger.log('system init state');
     kinect.openBodyReader();
 
@@ -57,7 +58,9 @@ if(kinect.open()) {
             socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
         }
 
-        socket.emit('init');
+        socket.on('foo', function () {
+           logger.log('received dummy event');
+        });
 
         // State Transition controlled by the client's command
         socket.on('command', function (token) {
@@ -168,7 +171,7 @@ function PushToListener(bufferBodyFrames) {
     });
     listenerSocket.emit("clientInit");
 
-    listener.on("serverHello", function () {
+    listenerSocket.on("serverHello", function () {
         logger.log("received hello from listener");
         logger.log('attempting to make contact with listener at ' + "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
         listenerSocket.emit(
@@ -205,7 +208,7 @@ function StateTrans(st){
 function locateBodyTrackedIndex(bufferBodyFrames){
     var ind = -1;
     for (var i=0; i<=5; i++){
-        if (bufferBodyFrames[0].bodies[i].tracked){ // tracked in the first frame
+        if (bufferBodyFrames[0] && bufferBodyFrames[0].bodies[i].tracked){ // tracked in the first frame
             ind = i;
             break;
         }
