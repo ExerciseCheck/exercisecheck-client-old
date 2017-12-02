@@ -5,7 +5,7 @@ $(document).ready(function () {
   var canvasSKLT = document.getElementById('bodyCanvas');
   var ctx1 = canvasSKLT.getContext('2d');
 
-  document.getElementById("display").style.display = 'none';
+  // document.getElementById("display").style.display = 'none';
   var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
 
   // Globals:
@@ -19,6 +19,7 @@ $(document).ready(function () {
 
   // Use bodyFrame from server to update the canvas 1 on client
   socket.on('init', function(bodyFrame,systemState){
+    console.log("received init from client:index.js");
     clientActive = true;
     liveupdateCanvas1(bodyFrame,-1);
     document.getElementById("command").value= 'Start';
@@ -27,6 +28,7 @@ $(document).ready(function () {
   });
 
   socket.on('rec', function(bodyFrame,systemState, tracingID){
+    console.log("received rec from client:index.js");
     clientActive = true;
     liveupdateCanvas1(bodyFrame,tracingID);
     document.getElementById("command").value = 'Stop';
@@ -35,6 +37,7 @@ $(document).ready(function () {
   });
 
   socket.on('disp', function(bufferBodyFrames,systemState, tracingID, activityLabeled){
+    console.log("received disp from client:index.js");
     clientActive = true; // unlock the button
     IntervalID = animateCanvas1(bufferBodyFrames,tracingID);
     document.getElementById("command").value = 'Live';
@@ -44,6 +47,7 @@ $(document).ready(function () {
   });
 
   socket.on('live', function(bodyFrame,systemState, tracingID){
+    console.log("received live from client:index.js");
     clientActive = true;
     clearInterval(IntervalID);
     liveupdateCanvas1(bodyFrame,-1);

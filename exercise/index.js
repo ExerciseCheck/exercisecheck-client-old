@@ -57,9 +57,12 @@ if(kinect.open()) {
             socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
         }
 
+        socket.emit('init');
+
         // State Transition controlled by the client's command
         socket.on('command', function (token) {
             systemState = StateTrans(systemState);
+            logger.log("systemState: " + systemState);
             switch (systemState) { // During the transition, prepare the buffer
                 case 1: // 0->1 or 3->1 Get ready for recording
                     activityLabeled = false;
