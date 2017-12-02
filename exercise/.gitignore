@@ -1,2 +1,4 @@
+out/*
+log/
 node_modules/
 exercise/node_modules/
