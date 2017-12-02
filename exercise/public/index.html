@@ -17,8 +17,7 @@
 	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
 
 </head>
-
-
+<body>
 <!-- begin Main -->
 <main role="main" aria-label="main section" id="main-content">
 	<!--Your custom code goes here-->
@@ -47,8 +46,7 @@
 </main>
 
 <a href="exercise.html">Launch Exercise Window</a>
-</html>
-
+</body>
 <script>
 	$(function () {
 
@@ -71,7 +69,7 @@
 				success: function (data) {
 					alert("Login success!");
 					console.log(data);
-					localStorage.setItem('token', data.authHeader); // write
+					localStorage.setItem('token', data); // write
 					console.log(localStorage.getItem('token')); // read
 					window.location  = "exercise.html";
 				},
@@ -87,3 +85,6 @@
 
 	});
 </script>
+
+</html>
+

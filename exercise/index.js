@@ -1,4 +1,4 @@
-var Kinect2 = require('kinect2'),
+// var Kinect2 = require('kinect2'),
     express = require('express'),
     app = express(),
     server = require('http').createServer(app),
@@ -12,8 +12,12 @@ const fs = require('fs');
 
 var timeout = 3000;
 
-var kinect = new Kinect2();
+// var kinect = new Kinect2();
 var clients = 0;
+server.listen(config.port);
+
+
+
 if(kinect.open()) {
     // Server Initiation
     server.listen(config.port);
@@ -157,14 +161,14 @@ if(kinect.open()) {
             socket.on('sendGT', function (token) {
                 //Send fake test payload...
                 console.log("trying to send fake payload...");
-                // listenerSocket.emit(
-                //     'bufferPush',
-                //     {
-                //         // bodyFrames: bufferBodyFrames,
-                //         bodyFrames: [],
-                //         auth: token
-                //     }
-                // );
+                listenerSocket.emit(
+                    'bufferPush',
+                    {
+                        // bodyFrames: bufferBodyFrames,
+                        bodyFrames: [],
+                        auth: token
+                    }
+                );
             });
 
             socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
@@ -183,7 +187,9 @@ if(kinect.open()) {
             })
         }); // end of io.on('connection',function)
     });
-}//end of kinect.open()
+}
+
+//end of kinect.open()
 
 
 // Functions ----------------------------------------------------------------------
