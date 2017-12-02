@@ -44,146 +44,152 @@ if(kinect.open()) {
     }
 
     var listenerSocket = listener(listenerLocStr);
+    logger.log('system init state');
+    kinect.openBodyReader();
+
+    // Connection On:
+    io.on('connection', function (socket) {
+
+        ++clients;
+        logger.log('a user connected');
+        // systemState could be 0..3 during connection event, but only 2 needs signal emission
+        if (systemState == 2) {
+            socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+        }
+
+        // State Transition controlled by the client's command
+        socket.on('command', function (token) {
+            systemState = StateTrans(systemState);
+            switch (systemState) { // During the transition, prepare the buffer
+                case 1: // 0->1 or 3->1 Get ready for recording
+                    activityLabeled = false;
+                    bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
+                    bufferBodyFrames = [];
+                    logger.log('System in Recording state');
+                    startTime = new Date().getTime();
+                    break;
+
+                case 2: // 1->2, Push the BodyFrames Data to the current trial
+                    duration = ((new Date().getTime() - startTime) / 1000).toFixed(2);
+                    kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
+                    bufferBodyFrames.durationsecs = duration;
+                    bufferBodyFrames.duration = duration.toString();
+                    bufferBodyFrames.bodyIndex = bodyIndex;
+                    bodyIndex = -1;
+                    bufferTrial.push(bufferBodyFrames);
+                    logger.log('system in Result Display state'); // Action
+                    socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
+                    socket.broadcast.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+                    //
+                    // push buffer trial to server
+                    //
+                    logger.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
+                    PushToListener(bufferBodyFrames);
+                    break;
+
+                case 0: // 2->0, get the system from Result Disp to Live state.
+                    kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
+                    logger.log('system in Live state');
+                default:
+            }
+        });
+        // Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
+        socket.on('dataLabelFromClient', function (num) { // label reference, exercise or discard
+            testID = bufferTrial.length - 1;
+            if (gtArray[gtArray.length - 1] == testID) {
+                gtArray.pop();
+            }
+            if (exArray[exArray.length - 1] == testID) {
+                exArray.pop();
+            }
+            if (num == 1) {
+                gtArray.push(testID);
+            }
+            else {
+                if (num == 2) {
+                    exArray.push(testID);
+                }
+            }
+            activityLabeled = true;
+            socket.emit('serverDataLabeled');
+            socket.broadcast.emit('serverDataLabeled');
+        })
+
+        socket.on('analyze', function () {
+            logger.log('analyze signal received!');
+            var chartData = chartAnalyze(bufferTrial, gtArray, exArray);
+            var barData = barAnalyze(bufferTrial, gtArray, exArray);
+            socket.emit('report', chartData, barData, gtArray, exArray);
+        });
+
+        socket.on('saveRequest', function (filename) {
+            save2xlsx(bufferTrial, gtArray, exArray, filename);
+        });
+
+        socket.on('sendGT', function (token) {
+            //Send fake test payload...
+            console.log("trying to send fake payload...");
+            // listenerSocket.emit(
+            //     'bufferPush',
+            //     {
+            //         // bodyFrames: bufferBodyFrames,
+            //         bodyFrames: [],
+            //         auth: token
+            //     }
+            // );
+        });
+
+        socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
+            var curveData = curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype);
+            socket.emit('curveResult', curveData);
+        });
+
+        // States
+
+
+        // disconnect
+        socket.on('disconnect', function () {
+            logger.log('a user disconnect');
+            listenerSocket.emit("clientGoodbye");
+            --clients;
+        })
+    }); // end of io.on('connection',function)
+}//end of kinect.open()
+
+function PushToListener(bufferBodyFrames) {
     logger.log("attempting connection to listener at " + listenerLocStr);
 
     listenerSocket.on('connect_timeout', function (timeout) {
         alert("could not connect to listener");
         logger.error("could not connect to listener");
     });
-
     listenerSocket.emit("clientInit");
 
-    listenerSocket.on("serverHello", function () {
+    listener.on("serverHello", function () {
         logger.log("received hello from listener");
-        logger.log('system init state');
-        kinect.openBodyReader();
-
-        // Connection On:
-        io.on('connection', function (socket) {
-
-            ++clients;
-            logger.log('a user connected');
-            // systemState could be 0..3 during connection event, but only 2 needs signal emission
-            if (systemState == 2) {
-                socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
+        logger.log('attempting to make contact with listener at ' + "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
+        listenerSocket.emit(
+            'bufferPush',
+            {
+                bodyFrames: bufferBodyFrames,
+                auth: token
             }
-
-            // State Transition controlled by the client's command
-            socket.on('command', function (token) {
-                systemState = StateTrans(systemState);
-                switch (systemState) { // During the transition, prepare the buffer
-                    case 1: // 0->1 or 3->1 Get ready for recording
-                        activityLabeled = false;
-                        bodyIndex = locateBodyTrackedIndex(bufferBodyFrames);
-                        bufferBodyFrames = [];
-                        logger.log('System in Recording state');
-                        startTime = new Date().getTime();
-                        break;
-
-                    case 2: // 1->2, Push the BodyFrames Data to the current trial
-                        duration = ((new Date().getTime() - startTime) / 1000).toFixed(2);
-                        kinect.closeBodyReader(); // if closeBodyReader is called twice, the server is down.
-                        bufferBodyFrames.durationsecs = duration;
-                        bufferBodyFrames.duration = duration.toString();
-                        bufferBodyFrames.bodyIndex = bodyIndex;
-                        bodyIndex = -1;
-                        bufferTrial.push(bufferBodyFrames);
-                        logger.log('system in Result Display state'); // Action
-                        socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
-                        socket.broadcast.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
-                        //
-                        // push buffer trial to server
-                        //
-
-                        // TODO: TASKS:
-                        // TODO:	1: Splitting or cleaning up the buffer to reduce data sent overall?
-                        // TODO:	2: Encryption?
-                        logger.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
-                        logger.log('attempting to make contact with listener at ' + "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
-                        listenerSocket.emit(
-                            'bufferPush',
-                            {
-                                bodyFrames: bufferBodyFrames,
-                                auth: token
-                            }
-                        );
-                        // TODO: doesn't work... why?
-                        listenerSocket.on("remoteError", function (msg) {
-                                alert("Oh no! " + msg);
-                                console.err(msg);
-                            }
-                        );
-                        break;
-
-                    case 0: // 2->0, get the system from Result Disp to Live state.
-                        kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
-                        logger.log('system in Live state');
-                    default:
-                }
-            });
-            // Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
-            socket.on('dataLabelFromClient', function (num) { // label reference, exercise or discard
-                testID = bufferTrial.length - 1;
-                if (gtArray[gtArray.length - 1] == testID) {
-                    gtArray.pop();
-                }
-                if (exArray[exArray.length - 1] == testID) {
-                    exArray.pop();
-                }
-                if (num == 1) {
-                    gtArray.push(testID);
-                }
-                else {
-                    if (num == 2) {
-                        exArray.push(testID);
-                    }
-                }
-                activityLabeled = true;
-                socket.emit('serverDataLabeled');
-                socket.broadcast.emit('serverDataLabeled');
-            })
-
-            socket.on('analyze', function () {
-                logger.log('analyze signal received!');
-                var chartData = chartAnalyze(bufferTrial, gtArray, exArray);
-                var barData = barAnalyze(bufferTrial, gtArray, exArray);
-                socket.emit('report', chartData, barData, gtArray, exArray);
-            });
-
-            socket.on('saveRequest', function (filename) {
-                save2xlsx(bufferTrial, gtArray, exArray, filename);
-            });
-
-            socket.on('sendGT', function (token) {
-                //Send fake test payload...
-                console.log("trying to send fake payload...");
-                // listenerSocket.emit(
-                //     'bufferPush',
-                //     {
-                //         // bodyFrames: bufferBodyFrames,
-                //         bodyFrames: [],
-                //         auth: token
-                //     }
-                // );
-            });
-
-            socket.on('curveRequest', function (gtInd, exInd, jt, datatype) {
-                var curveData = curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype);
-                socket.emit('curveResult', curveData);
-            });
-
-            // States
-
-
-            // disconnect
-            socket.on('disconnect', function () {
-                logger.log('a user disconnect');
-                listenerSocket.emit("clientGoodbye");
-                --clients;
-            })
-        }); // end of io.on('connection',function)
+        );
+        listenerSocket.on("remoteError", function (msg) {
+            alert("We're sorry but we failed to make contact with remote. Listener returned this error:\n" + msg);
+            logger.err(msg);
+        });
+        listenerSocket.on("remoteSuccess", function () {
+            logger.log("listener made successful post to remote");
+        });
     });
-}//end of kinect.open()
+    // TODO: serverGoodbye -> listenerGoodbye
+    listenerSocket.on("serverGoodbye", function () {
+        logger.log("received goodbye from listener; closing connection");
+    });
+    listenerSocket.emit("clientGoodbye");
+    logger.log("connection to listener closed");
+}
 
 
 // Functions ----------------------------------------------------------------------

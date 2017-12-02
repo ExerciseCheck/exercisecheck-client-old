@@ -85,17 +85,14 @@ const Listener = {
           logger.log(JSON.stringify(patientBuffer));
         }
 
-        /* write to anchor; on fail, inform EC client contact has failed */
-        if (!sendToAnchor(patientBuffer)) {
-          // TODO: forward error from remote
-          socket.emit('remoteError', 'Could not connect to remote');
-        }
+        /* write to anchor */
+        this.sendToAnchor(patientBuffer);
       });
 
       /* EC client tells listener to close */
       socket.on('listenerClose', () => {
         logger.log('received listener close request from client');
-        goodbye();
+        Listener.goodbye();
       });
     });
 
@@ -116,9 +113,13 @@ const Listener = {
       postReq.on('error', (err) => {
         success = false;
         logger.error(err);
+        socket.emit('remoteError', err);
       });
       postReq.write(JSON.stringify(JSONpayload));
       postReq.end();
+      if (success) {
+        socket.emit('remoteSuccess');
+      };
       return success;
     };
 
