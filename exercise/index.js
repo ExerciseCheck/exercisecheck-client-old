@@ -121,6 +121,8 @@ if(kinect.open()) {
                     listenerSocket.on("serverGoodbye", function () {
                         logger.log("received goodbye from listener; closing connection");
                     });
+                    listenerSocket.close();
+                    logger.log("connection to listener closed");
                     break;
 
                 case 0: // 2->0, get the system from Result Disp to Live state.
