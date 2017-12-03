@@ -44,14 +44,14 @@ if(kinect.open()) {
     }
 
     logger.log('system init state');
-    if (kinect.openBodyReader()) {
-        logger.log("body reader opened");
-    }
 
     // Connection On:
     io.on('connection', function (socket) {
         ++clients;
         logger.log('a user connected');
+        if (kinect.openBodyReader()) {
+            logger.log("body reader opened");
+        }
         // systemState could be 0..3 during connection event, but only 2 needs signal emission
         if (systemState == 2) {
             socket.emit('disp', bufferBodyFrames, systemState, bodyIndex, activityLabeled);
@@ -89,14 +89,21 @@ if(kinect.open()) {
                     // push buffer trial to server
                     //
                     logger.log("attempting push to listener at " + listenerLocStr);
-
                     let listenerSocket = require('socket.io-client')(listenerLocStr);
+
+                    // clever timer patch, credit:
+                    // https://stackoverflow.com/questions/32390268/socket-io-how-to-change-timeout-value-option-on-client-side
                     logger.log("sending clientInit to listener");
-                    listenerSocket.emit("clientInit");
-                    listenerSocket.on('connect_timeout', function (timeout) {
-                        alert("could not connect to listener");
-                        logger.error("could not connect to listener");
+                    listenerSocket.__connectTimer = setTimeout(function () {
+                        logger.error("timeout when trying to contact listener");
+                        listenerSocket.close()
+                    }, timeout);
+
+                    listenerSocket.on('connect', function() {
+                        clearTimeout(listenerSocket.__connectTimer);
                     });
+
+                    listenerSocket.emit("clientInit");
                     listenerSocket.on("serverHello", function () {
                         logger.log("received hello from listener, pushing buffer frame");
                         listenerSocket.emit(
@@ -117,12 +124,6 @@ if(kinect.open()) {
                     listenerSocket.on("serverGoodbye", function () {
                         logger.log("received goodbye from listener; closing connection");
                     });
-                    // listenerSocket.emit("clientGoodbye");
-                    // logger.log("connection to listener closed");
-
-                    // let connectTime = new Date().getTime();
-                    // while (!listenerSocket.connected && (new Date().getTime() - connectTime) < timeout) {};
-                    // listenerSocket.close();
                     break;
 
                 case 0: // 2->0, get the system from Result Disp to Live state.
@@ -186,7 +187,6 @@ if(kinect.open()) {
 
         // States
         kinect.on('bodyFrame', function(bodyFrame) {
-            // logger.log("new bodyframe received...");
             // logger.log(JSON.stringify(bodyFrame)) ;
 
             switch (systemState) {
@@ -223,11 +223,11 @@ if(kinect.open()) {
         socket.on('disconnect', function () {
             logger.log('a user disconnected');
             // listenerSocket.emit("clientGoodbye");
+            kinect.closeBodyReader();
             --clients;
         })
     }); // end of io.on('connection',function)
 }//end of kinect.open()
-
 
 // Functions ----------------------------------------------------------------------
 

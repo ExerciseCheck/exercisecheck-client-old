@@ -24,7 +24,8 @@ $(document).ready(function () {
     liveupdateCanvas1(bodyFrame,-1);
     document.getElementById("command").value= 'Start';
     document.getElementById("command").style.backgroundColor = '';
-    document.getElementById("display").style.display = 'none';
+    // TODO: What to do about this?
+    // document.getElementById("display").style.display = 'none';
   });
 
   socket.on('rec', function(bodyFrame,systemState, tracingID){
@@ -33,7 +34,7 @@ $(document).ready(function () {
     liveupdateCanvas1(bodyFrame,tracingID);
     document.getElementById("command").value = 'Stop';
     document.getElementById("command").style.backgroundColor = 'red';
-    document.getElementById("display").style.display = 'none';
+    // document.getElementById("display").style.display = 'none';
   });
 
   socket.on('disp', function(bufferBodyFrames,systemState, tracingID, activityLabeled){
@@ -42,8 +43,7 @@ $(document).ready(function () {
     IntervalID = animateCanvas1(bufferBodyFrames,tracingID);
     document.getElementById("command").value = 'Live';
     document.getElementById("command").style.backgroundColor = '';
-    if (!activityLabeled)
-      document.getElementById("display").style.display = 'block';
+    // if (!activityLabeled) document.getElementById("display").style.display = 'block';
   });
 
   socket.on('live', function(bodyFrame,systemState, tracingID){
@@ -54,11 +54,11 @@ $(document).ready(function () {
 
     document.getElementById("command").value= 'Start';
     document.getElementById("command").style.backgroundColor = '';
-    document.getElementById("display").style.display = 'none';
+    // document.getElementById("display").style.display = 'none';
   });
 
   socket.on('serverDataLabeled',function(){ // hid the buttons "Reference","Exercise","Discard"
-    document.getElementById("display").style.display = 'none';
+    // document.getElementById("display").style.display = 'none';
   });
 
   // Functions
