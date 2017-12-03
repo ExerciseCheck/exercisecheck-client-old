@@ -3,7 +3,6 @@ var Kinect2 = require('kinect2'),
     app = express(),
     server = require('http').createServer(app),
     io = require('socket.io').listen(server),
-    listenerSocketOpener = require('socket.io-client'),
     logger = require("./log.js").Logger("client"),
     config = require("./config.js").clientConfig,
     listenerLocation = config.getListener(),
@@ -89,49 +88,41 @@ if(kinect.open()) {
                     //
                     // push buffer trial to server
                     //
-                    logger.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
                     logger.log("attempting push to listener at " + listenerLocStr);
-                    var listenerSocket = listenerSocketOpener(listenerLocStr);
 
-                    let connectTime = new Date().getTime().toString();
-                    while (!listenerSocket.connected && (new Date().getTime().toString() - connectTime) < timeout) {}
+                    let listenerSocket = require('socket.io-client')(listenerLocStr);
+                    logger.log("sending clientInit to listener");
+                    listenerSocket.emit("clientInit");
+                    listenerSocket.on('connect_timeout', function (timeout) {
+                        alert("could not connect to listener");
+                        logger.error("could not connect to listener");
+                    });
+                    listenerSocket.on("serverHello", function () {
+                        logger.log("received hello from listener, pushing buffer frame");
+                        listenerSocket.emit(
+                            'bufferPush',
+                            {
+                                bodyFrames: bufferBodyFrames,
+                                auth: token
+                            }
+                        );
+                        listenerSocket.on("remoteError", function (msg) {
+                            logger.error("error message from remote: " + msg.toString());
+                        });
+                        listenerSocket.on("remoteSuccess", function () {
+                            logger.log("listener made successful post to remote");
+                        });
+                    });
+                    // TODO: serverGoodbye -> listenerGoodbye
+                    listenerSocket.on("serverGoodbye", function () {
+                        logger.log("received goodbye from listener; closing connection");
+                    });
+                    // listenerSocket.emit("clientGoodbye");
+                    // logger.log("connection to listener closed");
 
-                    if (listenerSocket.connected) {
-                        listenerSocket.on('connect_timeout', function (timeout) {
-                            alert("could not connect to listener");
-                            logger.error("could not connect to listener");
-                        });
-                        logger.log("sending clientInit to listener");
-                        listenerSocket.emit("clientInit");
-                        listenerSocket.on("serverHello", function () {
-                            logger.log("received hello from listener");
-                            logger.log('attempting to make contact with listener at ' + listenerLocStr);
-                            listenerSocket.emit(
-                                'bufferPush',
-                                {
-                                    bodyFrames: bufferBodyFrames,
-                                    auth: token
-                                }
-                            );
-                            listenerSocket.on("remoteError", function (msg) {
-                                alert("We're sorry but we failed to make contact with remote. Listener returned this error:\n" + msg);
-                                logger.err(msg);
-                            });
-                            listenerSocket.on("remoteSuccess", function () {
-                                logger.log("listener made successful post to remote");
-                            });
-                        });
-                        // TODO: serverGoodbye -> listenerGoodbye
-                        listenerSocket.on("serverGoodbye", function () {
-                            logger.log("received goodbye from listener; closing connection");
-                        });
-                        listenerSocket.emit("clientGoodbye");
-                        logger.log("connection to listener closed");
-                    } else {
-                        logger.error("connection closed due to timeout");
-                    }
-                    listenerSocket.close();
-
+                    // let connectTime = new Date().getTime();
+                    // while (!listenerSocket.connected && (new Date().getTime() - connectTime) < timeout) {};
+                    // listenerSocket.close();
                     break;
 
                 case 0: // 2->0, get the system from Result Disp to Live state.

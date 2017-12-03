@@ -87,7 +87,28 @@ const Listener = {
         }
 
         /* write to anchor */
-        this.sendToAnchor(patientBuffer);
+        // TODO: TASKS:
+        // TODO:	1: unhardcode port + url
+        // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
+        // TODO:	3: Encryption?
+        logger.log('attempting ' + remote.method + ' to remote at ' + remote.host + ':' + remote.port + remote.path);
+        const postReq = http.request(remote, (res) => {
+            logger.log('requested accepted by remote');
+        });
+
+        let success = true;
+        postReq.on('error', (err) => {
+            success = false;
+            logger.error(err);
+            socket.emit('remoteError', err);
+        });
+
+        postReq.write(JSON.stringify(patientBuffer));
+        postReq.end();
+
+        if (success) {
+            socket.emit('remoteSuccess');
+        }
       });
 
       /* EC client tells listener to close */
@@ -98,31 +119,6 @@ const Listener = {
     });
 
     // ---
-
-    /* make HTTP request to anchor server; returns bool (true if successful, false otherwise) */
-    const sendToAnchor = (JSONpayload) => {
-      // TODO: TASKS:
-      // TODO:	1: unhardcode port + url
-      // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
-      // TODO:	3: Encryption?
-      logger.log('attempting ' + remote.method + ' to remote at ' + remote.host + ':' + remote.port + remote.path);
-      const postReq = http.request(remote, (res) => {
-        logger.log('requested accepted by remote');
-      });
-
-      let success = true;
-      postReq.on('error', (err) => {
-        success = false;
-        logger.error(err);
-        socket.emit('remoteError', err);
-      });
-      postReq.write(JSON.stringify(JSONpayload));
-      postReq.end();
-      if (success) {
-        socket.emit('remoteSuccess');
-      };
-      return success;
-    };
 
     /* shut server down in a graceful manner */
     const goodbye = () => {
