@@ -44,13 +44,13 @@ if(kinect.open()) {
         listener = require('./listener.js').listener();
     }
 
-    var listenerSocket = listenerSocketOpener(listenerLocStr);
     logger.log('system init state');
-    kinect.openBodyReader();
+    if (kinect.openBodyReader()) {
+        logger.log("body reader opened");
+    }
 
     // Connection On:
     io.on('connection', function (socket) {
-
         ++clients;
         logger.log('a user connected');
         // systemState could be 0..3 during connection event, but only 2 needs signal emission
@@ -90,11 +90,54 @@ if(kinect.open()) {
                     // push buffer trial to server
                     //
                     logger.log('bufferTrial [recorded ' + (new Date().getTime().toString()) + ']');
-                    PushToListener(bufferBodyFrames);
+                    logger.log("attempting push to listener at " + listenerLocStr);
+                    var listenerSocket = listenerSocketOpener(listenerLocStr);
+
+                    let connectTime = new Date().getTime().toString();
+                    while (!listenerSocket.connected && (new Date().getTime().toString() - connectTime) < timeout) {}
+
+                    if (listenerSocket.connected) {
+                        listenerSocket.on('connect_timeout', function (timeout) {
+                            alert("could not connect to listener");
+                            logger.error("could not connect to listener");
+                        });
+                        logger.log("sending clientInit to listener");
+                        listenerSocket.emit("clientInit");
+                        listenerSocket.on("serverHello", function () {
+                            logger.log("received hello from listener");
+                            logger.log('attempting to make contact with listener at ' + listenerLocStr);
+                            listenerSocket.emit(
+                                'bufferPush',
+                                {
+                                    bodyFrames: bufferBodyFrames,
+                                    auth: token
+                                }
+                            );
+                            listenerSocket.on("remoteError", function (msg) {
+                                alert("We're sorry but we failed to make contact with remote. Listener returned this error:\n" + msg);
+                                logger.err(msg);
+                            });
+                            listenerSocket.on("remoteSuccess", function () {
+                                logger.log("listener made successful post to remote");
+                            });
+                        });
+                        // TODO: serverGoodbye -> listenerGoodbye
+                        listenerSocket.on("serverGoodbye", function () {
+                            logger.log("received goodbye from listener; closing connection");
+                        });
+                        listenerSocket.emit("clientGoodbye");
+                        logger.log("connection to listener closed");
+                    } else {
+                        logger.error("connection closed due to timeout");
+                    }
+                    listenerSocket.close();
+
                     break;
 
                 case 0: // 2->0, get the system from Result Disp to Live state.
-                    kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
+                    if (kinect.openBodyReader()) {
+                        logger.log("Kinect reopened");
+                    } // No Other Specific Actions in this block because it is done by kinect.on()
                     logger.log('system in Live state');
                 default:
             }
@@ -151,51 +194,48 @@ if(kinect.open()) {
         });
 
         // States
+        kinect.on('bodyFrame', function(bodyFrame) {
+            // logger.log("new bodyframe received...");
+            // logger.log(JSON.stringify(bodyFrame)) ;
 
+            switch (systemState) {
+                case 1: //recording: save the data being recorded, give identification to client
+                    socket.emit('rec', bodyFrame, systemState, bodyIndex);
+                    socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
+                    bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
+                    break;
+
+                case 2: //display
+                    logger.log('system in display state, but system is streaming. Something wrong here.');
+                    break;
+
+                case 0: //live
+                    bufferBodyFrames = [];
+                    bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
+                    socket.emit('live', bodyFrame,systemState);
+                    socket.broadcast.emit('live', bodyFrame,systemState);
+                    break;
+
+                case 3: //3 init
+                    bufferBodyFrames.push(bodyFrame);
+                    socket.emit('init', bodyFrame, systemState);
+                    socket.broadcast.emit('init', bodyFrame, systemState);
+                    break;
+
+                default:
+                    logger.log("unknown state");
+                    console.log('System State unknown');
+            } //end of switch
+        }); // end of kinect.on('bodyframe',function)
 
         // disconnect
         socket.on('disconnect', function () {
-            logger.log('a user disconnect');
-            listenerSocket.emit("clientGoodbye");
+            logger.log('a user disconnected');
+            // listenerSocket.emit("clientGoodbye");
             --clients;
         })
     }); // end of io.on('connection',function)
 }//end of kinect.open()
-
-function PushToListener(bufferBodyFrames) {
-    logger.log("attempting connection to listener at " + listenerLocStr);
-
-    listenerSocket.on('connect_timeout', function (timeout) {
-        alert("could not connect to listener");
-        logger.error("could not connect to listener");
-    });
-    listenerSocket.emit("clientInit");
-
-    listenerSocket.on("serverHello", function () {
-        logger.log("received hello from listener");
-        logger.log('attempting to make contact with listener at ' + "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path);
-        listenerSocket.emit(
-            'bufferPush',
-            {
-                bodyFrames: bufferBodyFrames,
-                auth: token
-            }
-        );
-        listenerSocket.on("remoteError", function (msg) {
-            alert("We're sorry but we failed to make contact with remote. Listener returned this error:\n" + msg);
-            logger.err(msg);
-        });
-        listenerSocket.on("remoteSuccess", function () {
-            logger.log("listener made successful post to remote");
-        });
-    });
-    // TODO: serverGoodbye -> listenerGoodbye
-    listenerSocket.on("serverGoodbye", function () {
-        logger.log("received goodbye from listener; closing connection");
-    });
-    listenerSocket.emit("clientGoodbye");
-    logger.log("connection to listener closed");
-}
 
 
 // Functions ----------------------------------------------------------------------

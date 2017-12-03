@@ -35,7 +35,7 @@ if (process.platform === 'win32') {
 /* Quit gracefully on a keyboard interrupt */
 process.on('SIGINT', () => {
   logger.log('received SIGINT; attempting graceful shutdown');
-  Listener.goodbye();
+  this.goodbye();
 }
 );
 
@@ -73,6 +73,7 @@ const Listener = {
       socket.on('clientGoodbye', (bye) => {
         logger.log('client disconnected');
         clients = Math.max(--clients, 0);
+        logger.log("sending goodbye to client");
         socket.emit('serverGoodbye');
         socket.disconnect();
       });
