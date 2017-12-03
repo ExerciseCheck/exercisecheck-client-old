@@ -13,8 +13,6 @@ const fs = require('fs');
 // location of the listener
 const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
 
-var timeout = 3000;
-
 var kinect = new Kinect2();
 var clients = 0;
 if(kinect.open()) {
@@ -97,7 +95,7 @@ if(kinect.open()) {
                     listenerSocket.__connectTimer = setTimeout(function () {
                         logger.error("timeout when trying to contact listener");
                         listenerSocket.close()
-                    }, timeout);
+                    }, config.keepAliveTimeout);
 
                     listenerSocket.on('connect', function() {
                         clearTimeout(listenerSocket.__connectTimer);
