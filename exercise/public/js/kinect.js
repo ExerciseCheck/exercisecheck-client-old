@@ -11,10 +11,7 @@ $(document).ready(function () {
     var radius = 9;
     var width = canvasSKLT.width;
     var height = canvasSKLT.height;
-
     var IntervalID;
-
-    // Signals
 
     // Use bodyFrame from server to update the canvas 1 on client
     socket.on('init', function (bodyFrame, systemState) {
@@ -35,7 +32,7 @@ $(document).ready(function () {
 
     socket.on('disp', function (bufferBodyFrames, systemState, tracingID, activityLabeled) {
         clientActive = true; // unlock the button
-        IntervalID = animateCanvas1(bufferBodyFrames, tracingID);
+        IntervalID = animateCanvas1(bufferBodyFrames, tracingID, 'disp');
         document.getElementById("command").value = 'Live';
         document.getElementById("command").style.backgroundColor = '';
         if (!activityLabeled)
@@ -54,6 +51,11 @@ $(document).ready(function () {
 
     socket.on('serverDataLabeled', function () { // hide the buttons "Reference","Exercise","Discard"
         document.getElementById("display").style.display = 'none';
+    });
+
+    socket.on('showing-speed', function (speed) {
+        document.getElementById("speed").innerHTML = (Math.round(speed * 100) / 100).toString() + " m/s";
+
     });
 
 
@@ -160,7 +162,7 @@ $(document).ready(function () {
         }
     }
 
-    function animateCanvas1(bufferBodyFrames, tracingID) {
+    function animateCanvas1(bufferBodyFrames, tracingID, source='') {
         var i = 0;
         var TimerID = setInterval(function () {
             liveupdateCanvas1(bufferBodyFrames[i], tracingID);
