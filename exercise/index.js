@@ -112,17 +112,19 @@ if(kinect.open()) {
                         );
                         listenerSocket.on("remoteError", function (msg) {
                             logger.error("error message from remote: " + msg.toString());
+                            listenerSocket.close();
+                            logger.log("connection closed");
                         });
                         listenerSocket.on("remoteSuccess", function () {
                             logger.log("listener made successful post to remote");
+                            listenerSocket.close();
+                            logger.log("connection closed");
                         });
                     });
                     // TODO: serverGoodbye -> listenerGoodbye
                     listenerSocket.on("serverGoodbye", function () {
                         logger.log("received goodbye from listener; closing connection");
                     });
-                    listenerSocket.close();
-                    logger.log("connection to listener closed");
                     break;
 
                 case 0: // 2->0, get the system from Result Disp to Live state.
