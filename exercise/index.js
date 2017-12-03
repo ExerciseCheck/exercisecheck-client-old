@@ -9,7 +9,6 @@ var Kinect2 = require('kinect2'),
     XLSX = require('xlsx');
 const fs = require('fs');
 
-
 // location of the listener
 const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
 
@@ -95,7 +94,7 @@ if(kinect.open()) {
                     listenerSocket.__connectTimer = setTimeout(function () {
                         logger.error("timeout when trying to contact listener");
                         listenerSocket.close()
-                    }, config.keepAliveTimeout);
+                    }, config.listener.keepAliveTimeout);
 
                     listenerSocket.on('connect', function() {
                         clearTimeout(listenerSocket.__connectTimer);
