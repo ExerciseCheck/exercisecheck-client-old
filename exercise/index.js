@@ -10,7 +10,7 @@ var Kinect2 = require('kinect2'),
 const fs = require('fs');
 
 // location of the listener
-const listenerLocStr = "http://" + listenerLocation.hostname + ":" + listenerLocation.port + listenerLocation.path;
+const listenerLocStr = "http://" + ( config.localListener ? "localhost" : listenerLocation.hostname ) + ":" + listenerLocation.port + listenerLocation.path;
 
 var kinect = new Kinect2();
 var clients = 0;
@@ -93,7 +93,7 @@ if(kinect.open()) {
                     logger.log("sending clientInit to listener");
                     listenerSocket.__connectTimer = setTimeout(function () {
                         logger.error("timeout when trying to contact listener");
-                        listenerSocket.close()
+                        listenerSocket.close();
                     }, config.listener.keepAliveTimeout);
 
                     listenerSocket.on('connect', function() {
@@ -111,7 +111,7 @@ if(kinect.open()) {
                             }
                         );
                         listenerSocket.on("remoteError", function (msg) {
-                            logger.error("error message from remote: " + msg.toString());
+                            logger.error("error message from remote: " +JSON.stringify(msg));
                             listenerSocket.close();
                             logger.log("connection closed");
                         });
