@@ -54,8 +54,17 @@ $(document).ready(function () {
     });
 
     socket.on('showing-speed', function (speed) {
-        document.getElementById("speed").innerHTML = (Math.round(speed * 100) / 100).toString() + " m/s";
+        var gt_speed = 0.3; // temp for testing
+        var ex_speed = Math.round(speed * 100) / 100;
+        var msg = 'The reference speed is ' + gt_speed.toString() + ' m/s. Your speed is ' + ex_speed.toString() + ' m/s.';
 
+        if ((gt_speed + 0.1) < ex_speed){
+            msg = 'Try slowing down. ' + msg;
+        }
+        else if ((gt_speed - 0.1) > ex_speed){
+            msg = 'Try increasing your speed. ' + msg;
+        }
+       document.getElementById("speed").innerHTML = msg;
     });
 
 
@@ -68,6 +77,7 @@ $(document).ready(function () {
         // Example of hand raising exercise.
         var line_marker = document.getElementById("line-marker").value;
         var gt_y_test;
+
         if (line_marker == 11) {
             gt_y_test = 250;
             draw_height_line(body.joints[8].depthX * width, gt_y_test, body.joints[line_marker].depthY * height);

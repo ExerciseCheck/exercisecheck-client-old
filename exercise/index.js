@@ -154,7 +154,7 @@ if (kinect.open()) {
         socket.on('disconnect', function () {
             console.log('a user disconnect');
             --clients;
-        })
+        });
     });
 
 
@@ -545,6 +545,7 @@ if (kinect.open()) {
         }
         return barData;
     }
+}
 /* Reference
 Look-up for joint selection
 Kinect2.JointType = {
