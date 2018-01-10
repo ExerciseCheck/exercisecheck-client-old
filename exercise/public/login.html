@@ -1,0 +1,84 @@
+<!DOCTYPE html> 
+<html> 
+<head> 
+    <meta charset="utf-8">
+     
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <title>ExerciseCheck Client</title> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+     
+    <link rel="stylesheet" type="text/css" href="css/style.css"/>
+      
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+     
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
+            integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+            crossorigin="anonymous"></script>
+      
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+      
+</head>
+ 
+<body class="whitebg"> <!-- begin Main --> 
+<main role="main" aria-label="main section" id="main-content">     <!--Your custom code goes here--> 
+    <div class="login-container" id="contactForm">  <h4 class="center">Welcome Back!</h4> 
+         
+        <div class="contact"> 
+            <form id="formID"> 
+                <div class="form-group">  <label class="form_label required" for="emailReady">Email:</label>  <input
+                        id="emailReady" class="form-control" type="email" name="email" required> 
+                </div>
+                 
+                <div class="form-group">  <label for="passReady" class="form_label required">Password</label>  <input
+                        type="password" name="password" required class="form-control" id="passReady"> 
+                </div>
+                 
+                <button id="submitButton" data-style="slide-left" data-color="blue"  
+                        class="btn btn-primary ladda-button"><span class="ladda-label">Login</span></button>
+                 
+            </form>
+             
+        </div>
+         
+    </div>
+     
+    <div class="form-group center marginTop40">  Don't have an account yet? <a href="http://sail.bu.edu:9001/signup">Please
+        sign up</a> 
+    </div>
+      
+</main>
+</body>
+ 
+<script>
+    $(function () {
+        var form = $('#submitButton').bind('click', submitHandler);
+        function submitHandler(e) {
+            e.preventDefault();
+            var form = $("#emailReady")[0]; 			//look at jquery for form handling and change the way value is obtained 
+            var usnm = form.value;
+            var form2 = $("#passReady")[0];
+            var pass = form2.value;
+            $.ajax({
+                type: 'POST',
+                url: "http://sail.bu.edu:9001/api/login",
+                data: {username: usnm, password: pass},
+                dataType: "json",
+                success: function (data) {
+                    console.log(data);
+                    localStorage.setItem('token', data);
+                    window.location="index.html";
+                }
+                , error: function (request, status, error) {
+                    var reply = request.responseText;
+                    var replyText = (JSON.parse(reply));
+                    alert(replyText.message);
+                }
+            })
+        };
+
+    });
+
+</script>
+</html>  

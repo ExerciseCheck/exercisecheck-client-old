@@ -1,5 +1,4 @@
 canvas {
-    border:2px dashed green;
     width: 640 px;
     height: 640 px;
 }
@@ -9,7 +8,7 @@ canvas {
 }
 
 body, .stage {
-  background: #042029;
+  background: #DDDEE3;
   /*background: #695757;*/
 
 }

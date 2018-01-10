@@ -1,5 +1,6 @@
 var socket = io.connect('/');
 var clientActive = false;
+var counter=0;
 
 $(document).ready(function () {
   var canvasSKLT = document.getElementById('bodyCanvas');
@@ -12,7 +13,7 @@ $(document).ready(function () {
   var radius=9;
   var width = canvasSKLT.width;
   var height = canvasSKLT.height;
-
+  var moveFactor = 0;
   var IntervalID;
 
   // Signals
@@ -59,20 +60,28 @@ $(document).ready(function () {
 
   // Functions
 
-  function drawCircle(x, y, r, color){ // Not used in current code
-    ctx1.beginPath();
-    ctx1.strokeStyle=color;
-    ctx1.arc(x, y,r,0,Math.PI*2);
-    ctx1.stroke();
-  }
+  // function drawCircle(x, y, r, color){ // Not used in current code
+  //   ctx1.beginPath();
+  //   ctx1.strokeStyle=color;
+  //   ctx1.arc(x, y,r,0,Math.PI*2);
+  //   ctx1.stroke();
 
-  function drawBody(body){
+  //   ctx1.beginPath();
+  //   ctx1.strokeStyle=color;
+  //   ctx1.arc(x+100, y+100,r,0,Math.PI*2);
+  //   ctx1.stroke();
+  // }
+
+
+  function drawBody(body,color){
+    counter+=1;
     //drawCircle(50, 50, 10, "green");
     jointType = [7,6,5,4,2,8,9,10,11,10,9,8,2,3,2,1,0,12,13,14,15,14,13,12,0,16,17,18,19] //re visit and draw in a line
+    moveFactor = 20;
     jointType.forEach(function(jointType){
-      drawJoints(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
+      drawJoints((body.joints[jointType].depthX) * width, (body.joints[jointType].depthY) * height);
     });
-    drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
+    // drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
 
     ctx1.beginPath();
     ctx1.moveTo(body.joints[7].depthX * width, body.joints[7].depthY * height);
@@ -81,16 +90,34 @@ $(document).ready(function () {
       ctx1.moveTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
     });
     ctx1.lineWidth=10;
-    ctx1.strokeStyle='blue';
+    ctx1.strokeStyle=color;
+    ctx1.stroke();
+    ctx1.closePath();
+
+    ctx1.beginPath();
+    ctx1.moveTo((body.joints[7].depthX * width)+moveFactor/*+20+(Math.random*40)*/, (body.joints[7].depthY) * height);
+    jointType.forEach(function(jointType){
+      ctx1.lineTo(((body.joints[jointType].depthX) * width)+moveFactor/*+20/*+(Math.random*40)*/, ((body.joints[jointType].depthY) * height));
+      ctx1.moveTo((body.joints[jointType].depthX* width+moveFactor)/*+20/*+(Math.random*40)*/, (body.joints[jointType].depthY * height));
+    });
+    ctx1.lineWidth=10;
+    ctx1.strokeStyle='green';
     ctx1.stroke();
     ctx1.closePath();
   }
+
 
   function drawJoints(cx,cy){
       ctx1.beginPath();
       ctx1.arc(cx,cy,radius,0,Math.PI*2); //radius is a global variable defined at the beginning
       ctx1.closePath();
       ctx1.fillStyle = "yellow";
+      ctx1.fill();
+
+      ctx1.beginPath();
+      ctx1.arc(cx+moveFactor,cy,radius,0,Math.PI*2); //radius is a global variable defined at the beginning
+      ctx1.closePath();
+      ctx1.fillStyle = "red";
       ctx1.fill();
   }
   // Draw Center Circle in ctx1 (canvasSKLT)
@@ -114,11 +141,16 @@ $(document).ready(function () {
     //drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
     if (tracingID == -1){
       bodyFrame.bodies.some(function(body){
-        if(body.tracked){ drawBody(body); return(body.tracked);}
+        if(body.tracked){ 
+          drawBody(body,'blue');
+          //drawBody2(body,'red'); 
+          return(body.tracked);
+        }
       });
     }
     else {
-      drawBody(bodyFrame.bodies[tracingID]);
+      drawBody(bodyFrame.bodies[tracingID],'blue');
+      //drawBody2(bodyFrame.bodies[tracingID],'red');
     }
   }
 
