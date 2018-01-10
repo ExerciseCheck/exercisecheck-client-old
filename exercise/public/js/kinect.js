@@ -78,6 +78,7 @@ $(document).ready(function () {
     //drawCircle(50, 50, 10, "green");
     jointType = [7,6,5,4,2,8,9,10,11,10,9,8,2,3,2,1,0,12,13,14,15,14,13,12,0,16,17,18,19] //re visit and draw in a line
     moveFactor = 20;
+    moveFactor = 1; // for the bubble version
     jointType.forEach(function(jointType){
       drawJoints((body.joints[jointType].depthX) * width, (body.joints[jointType].depthY) * height);
     });
@@ -89,8 +90,11 @@ $(document).ready(function () {
       ctx1.lineTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
       ctx1.moveTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
     });
-    ctx1.lineWidth=10;
-    ctx1.strokeStyle=color;
+
+    // For the bubble version
+    ctx1.lineWidth=50;
+    ctx1.lineCap = "round";
+    ctx1.strokeStyle="#00FFFF";
     ctx1.stroke();
     ctx1.closePath();
 
@@ -101,7 +105,7 @@ $(document).ready(function () {
       ctx1.moveTo((body.joints[jointType].depthX* width+moveFactor)/*+20/*+(Math.random*40)*/, (body.joints[jointType].depthY * height));
     });
     ctx1.lineWidth=10;
-    ctx1.strokeStyle='green';
+    ctx1.strokeStyle='blue';
     ctx1.stroke();
     ctx1.closePath();
   }
