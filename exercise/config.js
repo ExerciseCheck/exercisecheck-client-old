@@ -15,15 +15,15 @@ const config = {
     // is the bodyFrame sitting on localhost?
     localListener: true,
 
-    // location of listener if not on localhost
+    // location of listener; note that hostname is ignored if the listener is hosted locally
     listener: {
-      hostname: NaN, 
-      port: NaN,
-      path: NaN,
-      keepAliveTimeout: NaN
+      hostname: "",
+      port: "8005",
+      path: "/",
+      keepAliveTimeout: 5000
     },
 
-    // return JSON with connection info to listener, dependening on whether or not the listener is local
+    // return JSON with connection info to listener, depending on whether or not the listener is local
     getListener: () => {
       return config.clientConfig.localListener ? config.listenerConfig.local : config.clientConfig.listener;
     }
@@ -45,7 +45,7 @@ const config = {
   listenerConfig: {
     // describe the port and path where the listener can expect input
     local: {
-      hostname: 'sail.bu.edu',
+      hostname: 'localhost', // TODO: remove
       port: '8005',
       path: '/',
       keepAliveTimeout: '5000'
@@ -54,7 +54,7 @@ const config = {
     // remote server receiving HTTP(S) POST requests
     remote: {
       method: 'POST',
-      host: 'sail.bu.edu',
+      host: 'localhost',
       port: '9001',
       path: '/api/refexercises',
       headers: {

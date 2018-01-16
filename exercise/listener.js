@@ -35,7 +35,7 @@ if (process.platform === 'win32') {
 /* Quit gracefully on a keyboard interrupt */
 process.on('SIGINT', () => {
   logger.log('received SIGINT; attempting graceful shutdown');
-  Listener.goodbye();
+  this.goodbye();
 }
 );
 
@@ -73,6 +73,7 @@ const Listener = {
       socket.on('clientGoodbye', (bye) => {
         logger.log('client disconnected');
         clients = Math.max(--clients, 0);
+        logger.log("sending goodbye to client");
         socket.emit('serverGoodbye');
         socket.disconnect();
       });
@@ -85,42 +86,39 @@ const Listener = {
           logger.log(JSON.stringify(patientBuffer));
         }
 
-        /* write to anchor; on fail, inform EC client contact has failed */
-        if (!sendToAnchor(patientBuffer)) {
-          // TODO: forward error from remote
-          socket.emit('remoteError', 'Could not connect to remote');
+        /* write to anchor */
+        // TODO: TASKS:
+        // TODO:	1: unhardcode port + url
+        // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
+        // TODO:	3: Encryption?
+        logger.log('attempting ' + remote.method + ' to remote at ' + remote.host + ':' + remote.port + remote.path);
+        const postReq = http.request(remote, (res) => {
+            logger.log('requested accepted by remote');
+        });
+
+        let success = true;
+        postReq.on('error', (err) => {
+            success = false;
+            logger.error(err);
+            socket.emit('remoteError', err);
+        });
+
+        postReq.write(JSON.stringify(patientBuffer));
+        postReq.end();
+
+        if (success) {
+            socket.emit('remoteSuccess');
         }
       });
 
       /* EC client tells listener to close */
       socket.on('listenerClose', () => {
         logger.log('received listener close request from client');
-        goodbye();
+        this.goodbye();
       });
     });
 
     // ---
-
-    /* make HTTP request to anchor server; returns bool (true if successful, false otherwise) */
-    const sendToAnchor = (JSONpayload) => {
-      // TODO: TASKS:
-      // TODO:	1: unhardcode port + url
-      // TODO:	2: Splitting or cleaning up the buffer to reduce data sent overall?
-      // TODO:	3: Encryption?
-      logger.log('attempting ' + remote.method + ' to remote at ' + remote.host + ':' + remote.port + remote.path);
-      const postReq = http.request(remote, (res) => {
-        logger.log('requested accepted by remote');
-      });
-
-      let success = true;
-      postReq.on('error', (err) => {
-        success = false;
-        logger.error(err);
-      });
-      postReq.write(JSON.stringify(JSONpayload));
-      postReq.end();
-      return success;
-    };
 
     /* shut server down in a graceful manner */
     const goodbye = () => {
