@@ -1,8 +1,4 @@
-const electron = require('electron');
-// Module to control application life.
-const app = electron.app;
-// Module to create native browser window.
-const BrowserWindow = electron.BrowserWindow;
+const {app, BrowserWindow, Menu, webContents} = require('electron');
 
 const path = require('path');
 const url = require('url');
@@ -10,10 +6,16 @@ const url = require('url');
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow;
+let webViewId;
 
 function createWindow() {
   // Create the browser window.
-  mainWindow = new BrowserWindow({width: 800, height: 600});
+  mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    titleBarStyle: 'default',
+    frame: true
+  });
 
   // and load the index.html of the app.
   mainWindow.loadURL(url.format({
@@ -23,7 +25,7 @@ function createWindow() {
   }));
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools()
+  mainWindow.openDevTools();
 
   // Emitted when the window is closed.
   mainWindow.on('closed', function () {
@@ -31,7 +33,9 @@ function createWindow() {
     // in an array if your app supports multi windows, this is the time
     // when you should delete the corresponding element.
     mainWindow = null;
-  })
+  });
+
+  createMenu();
 }
 
 // This method will be called when Electron has finished
@@ -56,5 +60,57 @@ app.on('activate', function () {
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+// get the webview's webContents
+function getWebviewWebContents() {
+
+  return webContents.getAllWebContents()
+  // TODO replace `localhost` with whatever the remote web app's URL is
+    .filter(wc => wc.getURL().search(/localhost/gi) > -1)
+    .pop();
+}
+
+function createMenu() {
+
+  // First menu item is app name, skip
+  const topLevelItems = [
+    {},
+    {
+      label: 'Development',
+      submenu: [
+        {
+          label: 'Quit',
+          accelerator: 'CmdOrCtrl+Q',
+          click() {
+            app.quit();
+          }
+        },
+        {
+          label: 'Show Electron Dev Tools',
+          click() {
+            mainWindow.openDevTools();
+          }
+        },
+        {
+          label: 'Hide Electron Dev Tools',
+          click() {
+            mainWindow.closeDevTools();
+          }
+        },
+        {
+          label: 'Show Anchor Dev Tools',
+          click() {
+            mainWindow.webContents.send('openWebviewDevTools');
+          }
+        },
+        {
+          label: 'Hide Anchor Dev Tools',
+          click() {
+            mainWindow.webContents.send('closeWebviewDevTools');
+          }
+        }
+      ]
+    }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(topLevelItems));
+}
