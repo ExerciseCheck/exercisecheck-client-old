@@ -13,7 +13,7 @@ if(kinect.open()) {
 	server.listen(8000);
 	console.log('Server listening on port 8000');
 	console.log('Point your browser to http://localhost:8000');
-	app.use(express.static('public'))
+	app.use(express.static('public'));
 
 	// Initiation
 
@@ -37,7 +37,7 @@ if(kinect.open()) {
 		++clients;
 		console.log('a user connected');
 		// systemState could be 0..3 during connection event, but only 2 needs signal emission
-		if (systemState == 2) {
+		if (systemState === 2) {
 			socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled);
 		}
 
@@ -51,7 +51,7 @@ if(kinect.open()) {
 					bufferBodyFrames = [];
 					console.log('System in Recording state');
 					startTime = new Date().getTime();
-				break;
+					break;
 
 				case 2: // 1->2, Push the BodyFrames Data to the current trial
 					duration = ((new Date().getTime() - startTime)/1000).toFixed(2);
@@ -65,25 +65,30 @@ if(kinect.open()) {
 					console.log('system in Result Display state'); // Action
 					socket.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled); // activityLabeled should be false because recording is just ended
 					socket.broadcast.emit('disp',bufferBodyFrames,systemState, bodyIndex, activityLabeled);
-				break;
+					break;
 
 				case 0: // 2->0, get the system from Result Disp to Live state.
+          console.log("Buffer Length: ", bufferTrial.length);
+          console.log("Reference Index: ", (gtArray).toString());
+          console.log("Exercise index: ", (exArray).toString());
 					kinect.openBodyReader();// No Other Specific Actions in this block because it is done by kinect.on()
 					console.log('system in Live state');
+					break;
 				default:
+				  console.log("Something wrong, you should never see this");
 			}
 		});
 		// Speical Buttons: label buttons(3), report button(1), save(1) & curve show(1)
 		socket.on('dataLabelFromClient',function(num){ // label reference, exercise or discard
 			testID = bufferTrial.length-1;
-			if (gtArray[gtArray.length-1] == testID) { gtArray.pop(); }
-			if (exArray[exArray.length-1] == testID) { exArray.pop(); }
-						if (num == 1) { gtArray.push(testID); }
-			else{	if (num == 2) { exArray.push(testID); } }
+			if (gtArray[gtArray.length-1] === testID) { gtArray.pop(); }
+			if (exArray[exArray.length-1] === testID) { exArray.pop(); }
+						if (num === 1) { gtArray.push(testID); }
+			else{	if (num === 2) { exArray.push(testID); } }
 			activityLabeled = true;
 			socket.emit('serverDataLabeled');
 			socket.broadcast.emit('serverDataLabeled');
-		})
+		});
 
 		socket.on('analyze',function(){
 	    console.log('analyze signal received!');
@@ -101,10 +106,58 @@ if(kinect.open()) {
 			socket.emit('curveResult',curveData);
 		});
 
+		socket.on("save", function(){
+		  console.log("Received save data signal");
+		  re_data = [];
+		  ex_data = [];
+      for(var i=0; i<bufferTrial.length; i++){
+		    if (i in gtArray){re_data.push(bufferTrial[i]);}
+		    else if(i in exArray){ex_data.push(bufferTrial[i]);}
+      }
+      fs.writeFile("ref_data.json", JSON.stringify(re_data, null, "  "), function(err){if(err){return console.log(err);}});
+      console.log("Reference Data saved.");
+      fs.writeFile("exe_data.json", JSON.stringify(ex_data, null, "  "), function(err){if(err){return console.log(err);}});
+      console.log("Exercise Data saved.");
+    });
+
+		var noDuplicateTS = 0;
+		var lastSecond = 0;
+		var fps = 0;
+		var lastFrameMicroS = 0;
 		// States
 		kinect.on('bodyFrame', function(bodyFrame){
-			console.log("new bodyframe received...");
-			console.log(JSON.stringify(bodyFrame)) ;
+		  var currentTime = (new Date().getTime()/1000).toFixed(0);
+		  var currentTimeMicroS = (new Date().getTime()).toFixed(0);
+		  if (currentTimeMicroS - lastFrameMicroS < 80){
+		    return;
+      }
+      else{
+		    lastFrameMicroS = currentTimeMicroS;
+      }
+		  if(currentTime != lastSecond){
+		    console.log("FPS: ", fps);
+		    fps = 1;
+		    lastSecond = currentTime;
+      }
+      else{
+		    fps += 1;
+      }
+			if( currentTime % 5 === 0 && currentTime !== noDuplicateTS){
+			  var body_detected = bodyFrame.bodies.reduce(function (x, y){return x || y.tracked;}, false);
+			  if (!body_detected){
+			    console.log("Warning ["+currentTime.toString()+"]: No body detected!");
+        }
+        else{
+          console.log("Info ["+currentTime.toString()+"]: body frame received...");
+          bodyFrame.bodies.forEach(function(element){
+            if(element.tracked){
+              console.log(JSON.stringify(element));
+            }
+          });
+        }
+        noDuplicateTS = currentTime;
+      }
+			//console.log(JSON.stringify(bodyFrame));
 
 			switch (systemState) {
 				case 1: //recording: save the data being recorded, give identification to client
@@ -120,7 +173,7 @@ if(kinect.open()) {
 				case 0: //live
 					bufferBodyFrames = [];
 					bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
-					socket.emit('live', bodyFrame,systemState)
+					socket.emit('live', bodyFrame,systemState);
 					socket.broadcast.emit('live', bodyFrame,systemState);
 					break;
 
@@ -224,26 +277,26 @@ function getSpeed(bufferTrial,id,jt){
 }
 
 function getAmplitudeX(bufferTrial,id,jt){
-	var ListX = getRaw(bufferTrial,id,jt,0)
+	var ListX = getRaw(bufferTrial,id,jt,0);
 	var DistX = (Math.max(...ListX) - Math.min(...ListX));
 	return DistX;
 }
 
 function getAmplitudeY(bufferTrial,id,jt){
-	var ListY = getRaw(bufferTrial,id,jt,1)
+	var ListY = getRaw(bufferTrial,id,jt,1);
 	var DistY = (Math.max(...ListY) - Math.min(...ListY));
 	return DistY;
 }
 
 function getAmplitudeZ(bufferTrial,id,jt){
-	var ListZ = getRaw(bufferTrial,id,jt,2)
+	var ListZ = getRaw(bufferTrial,id,jt,2);
 	var DistZ = (Math.max(...ListZ) - Math.min(...ListZ));
 	return DistZ;
 }
 
 function getOrientation(bufferTrial,id,jt){
     var RotX = getRaw(bufferTrial,id,jt,3);
-		var maxRot = Math.max(...RotX), minRot = Math.min(...RotX)
+		var maxRot = Math.max(...RotX), minRot = Math.min(...RotX);
 		var lean = Math.abs(maxRot-minRot);
     return lean;
   }
@@ -251,18 +304,21 @@ function getOrientation(bufferTrial,id,jt){
 function save2xlsx(bufferTrial, gtArray, exArray, filename){
 
 	var wb = new Workbook(); //Create new wb object
+  console.log(gtArray);
+  console.log(exArray);
+  console.log(bufferTrial);
 	for (var i in gtArray){
 	    var ws_name = "GT_"+(i).toString();
 			var ws = sheet_from_bufferTrial(bufferTrial[gtArray[i]], ws_name);
 			wb.SheetNames.push(ws_name);
 			wb.Sheets[ws_name] = ws;
 	  }
-		for (var i in exArray){
-		    var ws_name = "EX_"+(i).toString();
-				var ws = sheet_from_bufferTrial(bufferTrial[exArray[i]], ws_name);
-				wb.SheetNames.push(ws_name);
-				wb.Sheets[ws_name] = ws;
-		  }
+  for (var i in exArray){
+      var ws_name = "EX_"+(i).toString();
+      var ws = sheet_from_bufferTrial(bufferTrial[exArray[i]], ws_name);
+      wb.SheetNames.push(ws_name);
+      wb.Sheets[ws_name] = ws;
+    }
 	var wbout = XLSX.write(wb, {bookType:'xlsx', bookSST:false, type: 'binary'}); //Define workbook type
 	XLSX.writeFile(wb, filename); //Write workbook
 }
@@ -404,7 +460,7 @@ function barAnalyze(bufferTrial, gtArray, exArray){
 	var threshold = {
 		Speed: 0.005,
 		HeightChange: 0.005,
-		Orientation: 1,
+		Orientation: 1
 	};
 	var speed_jt6_gt = 0, height_jt6_gt = 0,speed_jt10_gt = 0, height_jt10_gt = 0,
 			speed_jt0_gt = 0, height_jt0_gt = 0;

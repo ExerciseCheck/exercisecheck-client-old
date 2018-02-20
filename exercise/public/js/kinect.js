@@ -55,8 +55,12 @@ $(document).ready(function () {
 
   socket.on('serverDataLabeled',function(){ // hid the buttons "Reference","Exercise","Discard"
     document.getElementById("display").style.display = 'none';
+    document.getElementById("label").style.display = 'none';
   });
 
+  socket.on('testRecved', function(){
+    console.log("Received test reply");
+  });
   // Functions
 
   function drawCircle(x, y, r, color){ // Not used in current code

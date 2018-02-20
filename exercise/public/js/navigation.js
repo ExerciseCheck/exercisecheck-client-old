@@ -25,5 +25,10 @@ $(document).ready(function () {
     location.target = "_blank";
   });
 
+  $("#save").click(function(){
+    console.log("Request server to save data");
+    socket.emit('save');
+  });
+
 });
 //hide button
