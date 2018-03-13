@@ -22,7 +22,7 @@ function attachIPCListeners() {
   // we get this message from the main process
   ipc.on('evaluateDataFrame', () => {
     // the todo app defines this function
-    window.Bridge.evaluateDataFrame();
+    window.Bridge.processDataFrame();
   });
 }
 
