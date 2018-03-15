@@ -11,8 +11,8 @@ let webViewId;
 function createWindow() {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1376,
+    height: 800,
     titleBarStyle: 'default',
     frame: true
   });
@@ -106,6 +106,12 @@ function createMenu() {
           label: 'Hide Anchor Dev Tools',
           click() {
             mainWindow.webContents.send('closeWebviewDevTools');
+          }
+        },
+        {
+          label: 'Start Kinect',
+          click() {
+            getWebviewWebContents().send('startKinect');
           }
         }
       ]

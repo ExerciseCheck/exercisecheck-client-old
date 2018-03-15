@@ -1,6 +1,7 @@
 // in preload scripts, we have access to node.js and electron APIs
 // the remote web app will not have access, so this is safe
 const {ipcRenderer: ipc, remote} = require('electron');
+const Kinect2 = require('kinect2');
 
 init();
 
@@ -20,14 +21,24 @@ function init() {
 
 function attachIPCListeners() {
   // we get this message from the main process
-  ipc.on('evaluateDataFrame', () => {
-    // the todo app defines this function
-    window.Bridge.processDataFrame();
+  ipc.on('startKinect', () => {
+    setupKinect();
   });
 }
 
 function processDataFrame() {
   if (process.platform === 'darwin') {
     console.log('message received');
+  }
+}
+
+function setupKinect() {
+  const kinect = new Kinect2();
+  if(kinect.open()) {
+    window.Bridge.startKinect();
+    kinect.openBodyReader();
+    kinect.on('bodyFrame', function(bodyFrame){
+      window.Bridge.onBodyFrame(bodyFrame);
+    });
   }
 }

@@ -21,6 +21,7 @@ $webview.addEventListener('dom-ready', () => {
   // have to delay in order for the webview show/resize to settle
   setTimeout(() => {
     $loader.classList.add('loader-hide');
+    window.openWebviewDevTools();
   }, 100);
 });
 
