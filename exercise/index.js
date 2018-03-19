@@ -24,6 +24,11 @@ if(kinect.open()) {
 	// Data Storage, global variables in server
 	var	bufferTrial= [], // trial is a number of activities, including ground truth (gt) and exercises
 			bufferBodyFrames =[], gtArray = [], exArray = [];
+	// Use this to find out current position we reached in reference.
+	var refPos = 0;
+	var actionStart = false;
+	var actionTimeCount = 3, actionLastTime=0;
+	var last_recJoints = null;
 
 	// Start Time for the test
 	var startTime, duration;
@@ -51,6 +56,10 @@ if(kinect.open()) {
 					bufferBodyFrames = [];
 					console.log('System in Recording state');
 					startTime = new Date().getTime();
+					refPos = 0;
+					actionStart=false;
+					headStart=false;
+					actionTimeCount=3;
 					break;
 
 				case 2: // 1->2, Push the BodyFrames Data to the current trial
@@ -161,9 +170,77 @@ if(kinect.open()) {
 
 			switch (systemState) {
 				case 1: //recording: save the data being recorded, give identification to client
+          // Check if we can start to send out reference
+          if (locateBodyTrackedIndex([bodyFrame]) > 0 && !actionStart){
+            var headPos = bodyFrame.bodies[bodyIndex].joints[2];
+            // Condition 1: Head in center circle
+            var headReady = (((headPos.depthX - 0.5) ** 2 + (headPos.depthY - 0.2) ** 2) <= 0.1 ** 2);
+            if (last_recJoints === null){
+              last_recJoints = bodyFrame.bodies[bodyIndex].joints;
+            }
+            if (headReady){
+              // Condition 2: Position start
+              var c_p = distance_joint2joints_commonPoints({
+                joints1: last_recJoints,
+                joints2: bodyFrame.bodies[bodyIndex].joints,
+                pointThreshold: 0.1
+              });
+              //console.log("common points: ", c_p);
+              if (c_p > last_recJoints.length - 5){
+                last_recJoints = bodyFrame.bodies[bodyIndex].joints;
+              }
+              else{
+                actionStart = true;
+                last_recJoints = null;
+              }
+            }
+            else{
+              var refData = bufferTrial[gtArray[gtArray.length - 1]][0].bodies[bodyIndex];
+              if (refData !== null) {
+                socket.emit('recRef', refData);
+                socket.broadcast.emit('refRef', refData);
+              }
+            }
+          }
+
+          if(gtArray.length > 0 && actionStart){
+            // If action started, Prepare and emit reference data.
+            // countdown and show countdown number
+            if (actionTimeCount >= 0){
+              var c_t = (new Date().getTime()/1000).toFixed(0);
+              if (c_t - actionLastTime >= 1){
+                actionLastTime = c_t;
+                actionTimeCount -= 1;
+              }
+              else {
+                socket.emit('rec', bodyFrame, systemState, bodyIndex);
+                socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
+                break;
+              }
+              socket.emit('recRefCountdown', actionTimeCount);
+              socket.broadcast.emit('recRefCountdown', actionTimeCount);
+            }
+            var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][refPos]]);
+            var refData = bufferTrial[gtArray[gtArray.length - 1]][refPos].bodies[body_index];
+            if (refData !== null) {
+              socket.emit('recRef', refData);
+              socket.broadcast.emit('refRef', refData);
+            }
+            // Move reference index
+            refPos += 1;
+            // If meet end of reference, replay it
+            if (refPos >= bufferTrial[gtArray[gtArray.length-1]].length){
+              refPos = 0;
+            }
+          }
+
+          // normal rec data
 					socket.emit('rec', bodyFrame, systemState, bodyIndex);
 					socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
-					bufferBodyFrames.push(bodyFrame); // save the bodyFrame by pushing it to buffer
+					if(actionStart){
+            // save the bodyFrame by pushing it to buffer, only save frame when headReady
+					  bufferBodyFrames.push(bodyFrame);
+					}
 					break;
 
 				case 2: //display
@@ -171,6 +248,20 @@ if(kinect.open()) {
 					break;
 
 				case 0: //live
+          if (gtArray.length > 0) {
+            var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][refPos]]);
+            var refData = bufferTrial[gtArray[gtArray.length - 1]][refPos].bodies[body_index];
+            if (refData !== null) {
+              socket.emit('recRef', refData);
+              socket.broadcast.emit('refRef', refData);
+            }
+            // Move reference index
+            refPos += 1;
+            // If meet end of reference, replay it
+            if (refPos >= bufferTrial[gtArray[gtArray.length - 1]].length) {
+              refPos = 0;
+            }
+          }
 					bufferBodyFrames = [];
 					bufferBodyFrames.push(bodyFrame); // clean buffer and push the current bodyFrame to buffer. It is used to find the (1) bodyIndex to track.
 					socket.emit('live', bodyFrame,systemState);
@@ -259,6 +350,42 @@ function getRaw(bufferTrial,id,jt,datatype){
 		}
 	}
 	return rawdata;
+}
+
+function lstsq(joints1, joints2){
+  var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
+  var x=[], y=[];
+  points_list.map(function(point_index){
+    x.push([joints1[point_index].depthX, joints1[point_index].depthY, 1]);
+    y.push([joints2[point_index].depthX, joints2[point_index].depthY, 1]);
+
+
+  });
+
+}
+
+function distance_joint2joints_commonPoints(parameters){
+  var joints1 = parameters.joints1;
+  var joints2 = parameters.joints2;
+  var pointThreshold = pointThreshold in parameters? parameters.pointThreshold: 0.01;
+  // Only calculate common parts' common points, common points means points that didn't move much
+  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
+  return joint_list.reduce(function(sum, joint_index){
+    if (((joints1[joint_index].depthX-joints2[joint_index].depthX)**2+(joints1[joint_index].depthY-joints2[joint_index].depthY)**2) <= pointThreshold**2){
+      return sum + 1;
+    }
+    return sum
+  }, 0)
+}
+
+function distance_joints2joints_euclidean(parameters){
+  var joints1 = parameters.joints1;
+  var joints2 = parameters.joints2;
+  // Only calculate common parts' distance
+  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
+  return joint_list.reduce(function(sum, joint_index){
+    return sum + (joints1[joint_index] - joints2[joint_index])**2
+  }, 0);
 }
 
 function getSpeed(bufferTrial,id,jt){

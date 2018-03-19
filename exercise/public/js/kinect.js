@@ -4,6 +4,8 @@ var clientActive = false;
 $(document).ready(function () {
   var canvasSKLT = document.getElementById('bodyCanvas');
   var ctx1 = canvasSKLT.getContext('2d');
+  var canvasREF = document.getElementById('refCanvas');
+  var ctx2 = canvasREF.getContext('2d');
 
   document.getElementById("display").style.display = 'none';
   var colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
@@ -26,6 +28,7 @@ $(document).ready(function () {
     document.getElementById("display").style.display = 'none';
   });
 
+  // draw real time body frames
   socket.on('rec', function(bodyFrame,systemState, tracingID){
     clientActive = true;
     liveupdateCanvas1(bodyFrame,tracingID);
@@ -34,6 +37,7 @@ $(document).ready(function () {
     document.getElementById("display").style.display = 'none';
   });
 
+  // Display and replay recorded body frames
   socket.on('disp', function(bufferBodyFrames,systemState, tracingID, activityLabeled){
     clientActive = true; // unlock the button
     IntervalID = animateCanvas1(bufferBodyFrames,tracingID);
@@ -41,6 +45,21 @@ $(document).ready(function () {
     document.getElementById("command").style.backgroundColor = '';
     if (!activityLabeled)
       document.getElementById("display").style.display = 'block';
+  });
+
+  socket.on('recRefCountdown', function(countdownNumber){
+    //console.log("Received Count down frame");
+    ctx2.clearRect(0, 0, width, height);
+    ctx2.font = "200px Comic Sans MS";
+    ctx2.fillStyle = "red";
+    ctx2.textAlign = "center";
+    ctx2.fillText(countdownNumber.toString(), width/2, height/2+50);
+  });
+
+  // Display reference
+  socket.on('recRef', function(refBodyFrame){
+    clientActive = true;
+    liveUpdateCanvas2(refBodyFrame);
   });
 
   socket.on('live', function(bodyFrame,systemState, tracingID){
@@ -55,7 +74,6 @@ $(document).ready(function () {
 
   socket.on('serverDataLabeled',function(){ // hid the buttons "Reference","Exercise","Discard"
     document.getElementById("display").style.display = 'none';
-    document.getElementById("label").style.display = 'none';
   });
 
   socket.on('testRecved', function(){
@@ -70,45 +88,58 @@ $(document).ready(function () {
     ctx1.stroke();
   }
 
-  function drawBody(body){
+  function drawBody(parameters){
+    var body = parameters.body;
+    var ctx = 'ctx' in parameters ? parameters.ctx: ctx1;
     //drawCircle(50, 50, 10, "green");
-    jointType = [7,6,5,4,2,8,9,10,11,10,9,8,2,3,2,1,0,12,13,14,15,14,13,12,0,16,17,18,19] //re visit and draw in a line
+    jointType = [7,6,5,4,2,8,9,10,11,10,9,8,2,3,2,1,0,12,13,14,15,14,13,12,0,16,17,18,19];//re visit and draw in a line
     jointType.forEach(function(jointType){
-      drawJoints(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
+      drawJoints({cx: body.joints[jointType].depthX * width, cy: body.joints[jointType].depthY * height, ctx:ctx});
     });
-    drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
+    drawCenterCircle({
+      x: width / 2, y: height / 5, r: 50, nx: body.joints[2].depthX * width, ny: body.joints[2].depthY * height, ctx:ctx
+    });
 
-    ctx1.beginPath();
-    ctx1.moveTo(body.joints[7].depthX * width, body.joints[7].depthY * height);
+    ctx.beginPath();
+    ctx.moveTo(body.joints[7].depthX * width, body.joints[7].depthY * height);
     jointType.forEach(function(jointType){
-      ctx1.lineTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
-      ctx1.moveTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
+      ctx.lineTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
+      ctx.moveTo(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
     });
-    ctx1.lineWidth=10;
-    ctx1.strokeStyle='blue';
-    ctx1.stroke();
-    ctx1.closePath();
+    ctx.lineWidth=10;
+    ctx.strokeStyle='blue';
+    ctx.stroke();
+    ctx.closePath();
   }
 
-  function drawJoints(cx,cy){
-      ctx1.beginPath();
-      ctx1.arc(cx,cy,radius,0,Math.PI*2); //radius is a global variable defined at the beginning
-      ctx1.closePath();
-      ctx1.fillStyle = "yellow";
-      ctx1.fill();
+  function drawJoints(parameters){
+    var cx = parameters.cx;
+    var cy = parameters.cy;
+    var ctx = "ctx" in parameters? parameters.ctx: ctx1;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius,0,Math.PI*2); //radius is a global variable defined at the beginning
+    ctx.closePath();
+    ctx.fillStyle = "yellow";
+    ctx.fill();
   }
   // Draw Center Circle in ctx1 (canvasSKLT)
-  function drawCenterCircle(x, y, r, nx, ny){
-    ctx1.beginPath();
+  function drawCenterCircle(parameters){
+    var x = parameters.x;
+    var y = parameters.y;
+    var r = parameters.r;
+    var nx = parameters.nx;
+    var ny = parameters.ny;
+    var ctx = "ctx" in parameters? parameters.ctx:ctx1;
+    ctx.beginPath();
     if(nx > x-r && nx < x+r && ny > y-r && ny < y+r)
-      ctx1.strokeStyle="green";
+      ctx.strokeStyle="green";
     else
-      ctx1.strokeStyle="red";
+      ctx.strokeStyle="red";
 
-    ctx1.arc(x, y,r,0,Math.PI*2);
-    ctx1.stroke();
-    ctx1.closePath();
-    ctx1.strokeStyle="black";
+    ctx.arc(x, y,r,0,Math.PI*2);
+    ctx.stroke();
+    ctx.closePath();
+    ctx.strokeStyle="black";
   }
 
 
@@ -118,11 +149,11 @@ $(document).ready(function () {
     //drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
     if (tracingID == -1){
       bodyFrame.bodies.some(function(body){
-        if(body.tracked){ drawBody(body); return(body.tracked);}
+        if(body.tracked){ drawBody({body: body}); return(body.tracked);}
       });
     }
     else {
-      drawBody(bodyFrame.bodies[tracingID]);
+      drawBody({body: bodyFrame.bodies[tracingID]});
     }
   }
 
@@ -134,6 +165,11 @@ $(document).ready(function () {
       if (i>=bufferBodyFrames.length){i=0;}
     },20);
     return TimerID;
+  }
+
+  function liveUpdateCanvas2(refBodyFrame){
+    ctx2.clearRect(0, 0, width, height);
+    drawBody({body: refBodyFrame, ctx:ctx2});
   }
 });
 
