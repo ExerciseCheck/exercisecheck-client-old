@@ -2,6 +2,7 @@ var Kinect2 = require('kinect2'),
 	express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
+  spawn = require('child_process').spawn,
 	io = require('socket.io').listen(server);
 	XLSX = require('xlsx');
 const fs = require('fs');
@@ -29,6 +30,7 @@ if(kinect.open()) {
 	var actionStart = false;
 	var actionTimeCount = 3, actionLastTime=0;
 	var last_recJoints = null;
+	var python_running = false, python_result =[100, [1]];
 
 	// Start Time for the test
 	var startTime, duration;
@@ -144,7 +146,7 @@ if(kinect.open()) {
 		    lastFrameMicroS = currentTimeMicroS;
       }
 		  if(currentTime != lastSecond){
-		    console.log("FPS: ", fps);
+		    //console.log("FPS: ", fps);
 		    fps = 1;
 		    lastSecond = currentTime;
       }
@@ -157,10 +159,10 @@ if(kinect.open()) {
 			    console.log("Warning ["+currentTime.toString()+"]: No body detected!");
         }
         else{
-          console.log("Info ["+currentTime.toString()+"]: body frame received...");
+          //console.log("Info ["+currentTime.toString()+"]: body frame received...");
           bodyFrame.bodies.forEach(function(element){
             if(element.tracked){
-              console.log(JSON.stringify(element));
+              //console.log(JSON.stringify(element));
             }
           });
         }
@@ -171,66 +173,84 @@ if(kinect.open()) {
 			switch (systemState) {
 				case 1: //recording: save the data being recorded, give identification to client
           // Check if we can start to send out reference
-          if (locateBodyTrackedIndex([bodyFrame]) > 0 && !actionStart){
-            var headPos = bodyFrame.bodies[bodyIndex].joints[2];
+          if ('joints' in bodyFrame.bodies[bodyIndex] && !actionStart){
             // Condition 1: Head in center circle
+            var headPos = bodyFrame.bodies[bodyIndex].joints[2];
             var headReady = (((headPos.depthX - 0.5) ** 2 + (headPos.depthY - 0.2) ** 2) <= 0.1 ** 2);
-            if (last_recJoints === null){
-              last_recJoints = bodyFrame.bodies[bodyIndex].joints;
-            }
+            // Condition 2: Position start, given head is ready
             if (headReady){
-              // Condition 2: Position start
-              var c_p = distance_joint2joints_commonPoints({
-                joints1: last_recJoints,
-                joints2: bodyFrame.bodies[bodyIndex].joints,
-                pointThreshold: 0.1
-              });
-              //console.log("common points: ", c_p);
-              if (c_p > last_recJoints.length - 5){
-                last_recJoints = bodyFrame.bodies[bodyIndex].joints;
-              }
+              if (gtArray.length > 0) {
+                // Use least square (affine transformation) to compare similarity between current position with ref
+                var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][0]]);
+                var frameBody_index = locateBodyTrackedIndex([bodyFrame]);
+                lstsq(bufferTrial[gtArray[gtArray.length-1]][0].bodies[body_index].joints, bodyFrame.bodies[frameBody_index].joints );
+                if(python_result[0] < 0.2){
+                  console.log("Passed posture detection using least square");
+                  actionStart = true;
+                }
+              } // End of if (gtArray.length > 0) : if
               else{
-                actionStart = true;
-                last_recJoints = null;
-              }
+                // If reference not defined, use common points to detect action start
+                if (last_recJoints === null)
+                  last_recJoints = bodyFrame.bodies[bodyIndex].joints;
+                var c_p = distance_joint2joints_commonPoints({joints1: last_recJoints, joints2:bodyFrame.bodies[bodyIndex].joints, pointThreshold: 0.1});
+                if (c_p > last_recJoints.length - 5) {
+                  last_recJoints = bodyFrame.bodies[bodyIndex].joints;
+                  console.log("current common points ", c_p);
+                }
+                else{
+                  console.log("Passed posture detection using commonpoints");
+                  actionStart = true;
+                  last_recJoints = null;
+                }
+              } // End of if (gtArray.length > 0) : else
             }
             else{
-              var refData = bufferTrial[gtArray[gtArray.length - 1]][0].bodies[bodyIndex];
-              if (refData !== null) {
-                socket.emit('recRef', refData);
-                socket.broadcast.emit('refRef', refData);
+              // If head is not ready, just show first frame of reference, if there is any ref
+              if (gtArray.length > 0) {
+                var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][refPos]]);
+                var refData = bufferTrial[gtArray[gtArray.length - 1]][0].bodies[body_index];
+                if (refData !== null) {
+                  socket.emit('recRef', refData);
+                  socket.broadcast.emit('refRef', refData);
+                }
               }
-            }
+            } // End of: if(headReady)
           }
 
           if(gtArray.length > 0 && actionStart){
             // If action started, Prepare and emit reference data.
             // countdown and show countdown number
             if (actionTimeCount >= 0){
+              socket.emit('recRefCountdown', actionTimeCount);
+              socket.broadcast.emit('recRefCountdown', actionTimeCount);
+
               var c_t = (new Date().getTime()/1000).toFixed(0);
               if (c_t - actionLastTime >= 1){
                 actionLastTime = c_t;
                 actionTimeCount -= 1;
               }
               else {
+                // Only start rest recording when countdown is over, otherwise just update recording canvas
                 socket.emit('rec', bodyFrame, systemState, bodyIndex);
                 socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
                 break;
               }
-              socket.emit('recRefCountdown', actionTimeCount);
-              socket.broadcast.emit('recRefCountdown', actionTimeCount);
             }
-            var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][refPos]]);
-            var refData = bufferTrial[gtArray[gtArray.length - 1]][refPos].bodies[body_index];
-            if (refData !== null) {
-              socket.emit('recRef', refData);
-              socket.broadcast.emit('refRef', refData);
-            }
-            // Move reference index
-            refPos += 1;
-            // If meet end of reference, replay it
-            if (refPos >= bufferTrial[gtArray[gtArray.length-1]].length){
-              refPos = 0;
+            else {
+              // When countdown is over, update reference
+              var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][refPos]]);
+              var refData = bufferTrial[gtArray[gtArray.length - 1]][refPos].bodies[body_index];
+              if (refData !== null) {
+                socket.emit('recRef', refData);
+                socket.broadcast.emit('refRef', refData);
+              }
+              // Move reference index, can use this to control replay speed
+              refPos += 1;
+              // If meet end of reference, replay it
+              if (refPos >= bufferTrial[gtArray[gtArray.length - 1]].length) {
+                refPos = 0;
+              }
             }
           }
 
@@ -238,7 +258,7 @@ if(kinect.open()) {
 					socket.emit('rec', bodyFrame, systemState, bodyIndex);
 					socket.broadcast.emit('rec', bodyFrame, systemState, bodyIndex);
 					if(actionStart){
-            // save the bodyFrame by pushing it to buffer, only save frame when headReady
+            // save the bodyFrame by pushing it to buffer, only save frame when actionStart. Once it start, it will keep recording
 					  bufferBodyFrames.push(bodyFrame);
 					}
 					break;
@@ -353,15 +373,33 @@ function getRaw(bufferTrial,id,jt,datatype){
 }
 
 function lstsq(joints1, joints2){
-  var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
-  var x=[], y=[];
-  points_list.map(function(point_index){
-    x.push([joints1[point_index].depthX, joints1[point_index].depthY, 1]);
-    y.push([joints2[point_index].depthX, joints2[point_index].depthY, 1]);
-
-
-  });
-
+  if (!python_running) {
+    python_running = true;
+    var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
+    var x = [], y = [];
+    points_list.map(function (point_index) {
+      x.push([joints1[point_index].depthX, joints1[point_index].depthY]);
+      y.push([joints2[point_index].depthX, joints2[point_index].depthY]);
+    });
+    var affine_py = spawn('python', ['affine_transformation.py']);
+    var output = null;
+    affine_py.on('error', function (err) {
+      console.log("failed to start python process")
+    });
+    affine_py.stdout.on('data', function (data) {
+      //console.log("***: ", data.toString());
+      python_result = JSON.parse(data.toString());
+      console.log(python_result[0]);
+    });
+    //affine_py.stdout.on('end', function(){console.log("we get least square error: ",output)});
+    affine_py.stderr.on('data', function (data) {
+      console.log("error! ", data.toString());
+    });
+    affine_py.stdio[0].write(JSON.stringify([x, y]));
+    affine_py.stdio[0].end();
+    affine_py.on('close', function(code){python_running=false;});
+    //affine_py.on('close', function(code){console.log("returned code ${code}")});
+  }
 }
 
 function distance_joint2joints_commonPoints(parameters){
@@ -369,7 +407,7 @@ function distance_joint2joints_commonPoints(parameters){
   var joints2 = parameters.joints2;
   var pointThreshold = pointThreshold in parameters? parameters.pointThreshold: 0.01;
   // Only calculate common parts' common points, common points means points that didn't move much
-  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
+  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
   return joint_list.reduce(function(sum, joint_index){
     if (((joints1[joint_index].depthX-joints2[joint_index].depthX)**2+(joints1[joint_index].depthY-joints2[joint_index].depthY)**2) <= pointThreshold**2){
       return sum + 1;
@@ -382,7 +420,7 @@ function distance_joints2joints_euclidean(parameters){
   var joints1 = parameters.joints1;
   var joints2 = parameters.joints2;
   // Only calculate common parts' distance
-  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()]
+  var joint_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
   return joint_list.reduce(function(sum, joint_index){
     return sum + (joints1[joint_index] - joints2[joint_index])**2
   }, 0);
