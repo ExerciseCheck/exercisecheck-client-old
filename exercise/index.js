@@ -3,8 +3,9 @@ var Kinect2 = require('kinect2'),
 	app = express(),
 	server = require('http').createServer(app),
   spawn = require('child_process').spawn,
-	io = require('socket.io').listen(server);
-	XLSX = require('xlsx');
+	io = require('socket.io').listen(server),
+	XLSX = require('xlsx'),
+  numeric = require('numeric');
 const fs = require('fs');
 
 var kinect = new Kinect2();
@@ -183,8 +184,17 @@ if(kinect.open()) {
                 // Use least square (affine transformation) to compare similarity between current position with ref
                 var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][0]]);
                 var frameBody_index = locateBodyTrackedIndex([bodyFrame]);
-                lstsq(bufferTrial[gtArray[gtArray.length-1]][0].bodies[body_index].joints, bodyFrame.bodies[frameBody_index].joints );
-                if(python_result[0] < 0.2){
+                var joints1 = bufferTrial[gtArray[gtArray.length-1]][0].bodies[body_index].joints;
+                var joints2 = bodyFrame.bodies[frameBody_index].joints;
+                var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
+                var x = [], y = [];
+                points_list.map(function (point_index) {
+                  // Add one extra dimension 1, used for translation
+                  x.push([joints1[point_index].depthX, joints1[point_index].depthY, 1]);
+                  y.push([joints2[point_index].depthX, joints2[point_index].depthY, 1]);
+                });
+                python_result = lstsq(x, y);
+                if(python_result[0] < 1){
                   console.log("Passed posture detection using least square");
                   actionStart = true;
                 }
@@ -372,7 +382,56 @@ function getRaw(bufferTrial,id,jt,datatype){
 	return rawdata;
 }
 
-function lstsq(joints1, joints2){
+/*
+Description: Javascript implementation of least square method. It computes the weight W that minimizes the square
+L2 norm of Y - XW. If Y is a matrix rather than a vector, It returns the lstsq result for each column of Y. i.e.
+W = [W_1, W_2,....,W_n] where W_n = lstsq(X,Y_n), a column vector.
+Parameters:
+    X: N by M array
+    Y; N by K array
+Returns:
+    W: M by K array
+ */
+function lstsq(X, Y)
+{
+  //get dimensions
+  var K = Y[0].length;
+  var N = Y.length;
+  var M = X[0].length;
+
+  //out put array
+  var W = [];
+
+  //compute each W_n
+  for(n = 0; n < K; n++)
+  {
+    var Y_n = numeric.transpose(Y).slice(n, n + 1);
+    Y_n = numeric.transpose(Y_n);
+    // X^T dot X
+    var w_n = numeric.dot(numeric.transpose(X),X);
+    //X^T dot X inverse
+    w_n = numeric.inv(w_n);
+    //X^T dot X inverse dot x^T
+    w_n = numeric.dot(w_n, numeric.transpose(X));
+    //dot y
+    w_n = numeric.dot(w_n, Y_n);
+    W[n] = w_n;
+  }
+  W = numeric.transpose(W);
+
+  // Calculate error
+  var After_trans = numeric.dot(X, W);
+  var err = 0;
+  for (i = 0; i < After_trans.length; i++){
+    for (j = 0; j < After_trans[0].length; j++){
+      err = (After_trans[i][j] - Y[i][j]) ** 2;
+    }
+  }
+  var result = [err, W];
+  return result;
+}
+
+function lstsq_python(joints1, joints2){
   if (!python_running) {
     python_running = true;
     var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
