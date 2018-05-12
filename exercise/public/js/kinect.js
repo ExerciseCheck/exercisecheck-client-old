@@ -12,11 +12,12 @@ $(document).ready(function () {
     var width = canvasSKLT.width;
     var height = canvasSKLT.height;
     var IntervalID;
-
+    var threshold_flag;
+    var reps = 0;
     // Use bodyFrame from server to update the canvas 1 on client
     socket.on('init', function (bodyFrame, systemState) {
         clientActive = true;
-        liveupdateCanvas1(bodyFrame, -1);
+        updateCanvas(bodyFrame, -1);
         document.getElementById("command").value = 'Start';
         document.getElementById("command").style.backgroundColor = '';
         document.getElementById("display").style.display = 'none';
@@ -24,7 +25,17 @@ $(document).ready(function () {
 
     socket.on('rec', function (bodyFrame, systemState, tracingID) {
         clientActive = true;
-        liveupdateCanvas1(bodyFrame, tracingID);
+
+        // Initializing flag for counting repetitions
+        // For exercise, should get from reference
+        if (!threshold_flag){
+            threshold_flag = 'down';
+        }
+        temp_reps = updateCanvas(bodyFrame, tracingID, 'rec', threshold_flag);
+        if (temp_reps){
+            threshold_flag = temp_reps[1];
+            document.getElementById("reps").innerHTML = parseInt(document.getElementById("reps").innerHTML) + temp_reps[0];
+        }
         document.getElementById("command").value = 'Stop';
         document.getElementById("command").style.backgroundColor = 'red';
         document.getElementById("display").style.display = 'none';
@@ -32,6 +43,7 @@ $(document).ready(function () {
 
     socket.on('disp', function (bufferBodyFrames, systemState, tracingID, activityLabeled) {
         clientActive = true; // unlock the button
+        reps = 0;
         IntervalID = animateCanvas1(bufferBodyFrames, tracingID, 'disp');
         document.getElementById("command").value = 'Live';
         document.getElementById("command").style.backgroundColor = '';
@@ -42,7 +54,7 @@ $(document).ready(function () {
     socket.on('live', function (bodyFrame) {
         clientActive = true;
         clearInterval(IntervalID);
-        liveupdateCanvas1(bodyFrame, -1);
+        updateCanvas(bodyFrame, -1);
 
         document.getElementById("command").value = 'Start';
         document.getElementById("command").style.backgroundColor = '';
@@ -54,8 +66,17 @@ $(document).ready(function () {
     });
 
     socket.on('showing-speed', function (speed) {
-        document.getElementById("speed").innerHTML = (Math.round(speed * 100) / 100).toString() + " m/s";
+        var gt_speed = 0.3; // temp for testing
+        var ex_speed = Math.round(speed * 100) / 100;
+        var msg = 'The reference speed is ' + gt_speed.toString() + ' m/s. Your speed is ' + ex_speed.toString() + ' m/s.';
 
+        if ((gt_speed + 0.1) < ex_speed){
+            msg = 'Try slowing down. ' + msg;
+        }
+        else if ((gt_speed - 0.1) > ex_speed){
+            msg = 'Try increasing your speed. ' + msg;
+        }
+       document.getElementById("speed").innerHTML = msg;
     });
 
 
@@ -64,17 +85,6 @@ $(document).ready(function () {
         jointType.forEach(function (jointType) {
             drawJoints(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
         });
-
-        // Example of hand raising exercise.
-        var line_marker = document.getElementById("line-marker").value;
-        var gt_y_test;
-        if (line_marker == 11) {
-            gt_y_test = 250;
-            draw_height_line(body.joints[8].depthX * width, gt_y_test, body.joints[line_marker].depthY * height);
-        } else if (line_marker == 0) {
-            gt_y_test = 500;
-            draw_height_line(body.joints[13].depthX * width, gt_y_test, body.joints[line_marker].depthY * height, comparison = 'greater', direction = 'both');
-        }
 
         drawCenterCircle(width / 2, height / 5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
 
@@ -112,11 +122,23 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
+    function count_reps(body, threshold_flag){
+        var reps = 0;
+        var joint = 0;
+        var current_pt = body.joints[joint].depthY*height;
+        if ((threshold_flag == 'down') && (current_pt < 500)){
+            reps++;
+            return [reps,'up'];
+        } else if ((threshold_flag == 'up') && (current_pt > 600)){
+            return [reps,'down'];
+        } else {
+            return [reps, threshold_flag]
+        }
+    }
 
     // Line to indicate user reaching some standard or requirement
     // Input is start of line, ground truth height, exercise height
     // Line is yellow if requirement unfulfilled, green if fulfilled
-
     function draw_height_line(starting_x, gt_y, ex_y, comparison='less', direction='right') {
         ctx1.beginPath();
         if (comparison == 'less') {
@@ -148,24 +170,30 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
-    function liveupdateCanvas1(bodyFrame, tracingID) {
+    function updatCanvas(bodyFrame, tracingID, mode='', threshold_flag='') {
         ctx1.clearRect(0, 0, width, height);
+        var reps = 0;
         if (tracingID == -1) {
             bodyFrame.bodies.some(function (body) {
                 if (body.tracked) {
                     drawBody(body);
-                    return (body.tracked);
+                    if (mode=='rec'){
+                        reps = count_reps(body, threshold_flag);
+                    }
                 }
             });
         } else {
             drawBody(bodyFrame.bodies[tracingID]);
+            reps = count_reps(body, threshold_flag);
         }
+        return reps;
     }
 
     function animateCanvas1(bufferBodyFrames, tracingID, source='') {
         var i = 0;
         var TimerID = setInterval(function () {
-            liveupdateCanvas1(bufferBodyFrames[i], tracingID);
+            update
+   Canvas(bufferBodyFrames[i], tracingID);
             i++;
             if (i >= bufferBodyFrames.length) {
                 i = 0;
@@ -174,35 +202,3 @@ $(document).ready(function () {
         return TimerID;
     }
 });
-
-
-/* Reference
-Look-up for joint selection
-Kinect2.JointType = {
- spineBase       : 0,
- spineMid        : 1,
- neck            : 2,
- head            : 3,
- shoulderLeft    : 4,
- elbowLeft       : 5,
- wristLeft       : 6,
- handLeft        : 7,
- shoulderRight   : 8,
- elbowRight      : 9,
- wristRight      : 10,
- handRight       : 11,
- hipLeft         : 12,
- kneeLeft        : 13,
- ankleLeft       : 14,
- footLeft        : 15,
- hipRight        : 16,
- kneeRight       : 17,
- ankleRight      : 18,
- footRight       : 19,
- spineShoulder   : 20,
- handTipLeft     : 21,
- thumbLeft       : 22,
- handTipRight    : 23,
- thumbRight      : 24
-};
-*/
