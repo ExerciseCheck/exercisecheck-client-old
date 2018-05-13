@@ -14,6 +14,7 @@ $(document).ready(function () {
     var IntervalID;
     var threshold_flag;
     var reps = 0;
+
     // Use bodyFrame from server to update the canvas 1 on client
     socket.on('init', function (bodyFrame, systemState) {
         clientActive = true;
@@ -27,9 +28,10 @@ $(document).ready(function () {
         clientActive = true;
 
         // Initializing flag for counting repetitions
-        // For exercise, should get from reference
         if (!threshold_flag){
-            threshold_flag = 'down';
+
+            // Based on exercise (eg squat), know which direction we start counting reps in
+            threshold_flag = getExerciseInfo(document.getElementById("exercise").value)[1];
         }
         temp_reps = updateCanvas(bodyFrame, tracingID, 'rec', threshold_flag);
         if (temp_reps){
@@ -122,9 +124,11 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
-    function count_reps(body, threshold_flag){
+    function countReps(body, threshold_flag){
         var reps = 0;
-        var joint = 0;
+
+        // Know what the important joint is based on exercise (eg squat)
+        var joint = getExerciseInfo(document.getElementById("exercise").value)[0];
         var current_pt = body.joints[joint].depthY*height;
         if ((threshold_flag == 'down') && (current_pt < 500)){
             reps++;
@@ -170,7 +174,7 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
-    function updatCanvas(bodyFrame, tracingID, mode='', threshold_flag='') {
+    function updateCanvas(bodyFrame, tracingID, mode='', threshold_flag='') {
         ctx1.clearRect(0, 0, width, height);
         var reps = 0;
         if (tracingID == -1) {
@@ -178,27 +182,32 @@ $(document).ready(function () {
                 if (body.tracked) {
                     drawBody(body);
                     if (mode=='rec'){
-                        reps = count_reps(body, threshold_flag);
+                        reps = countReps(body, threshold_flag);
                     }
                 }
             });
         } else {
             drawBody(bodyFrame.bodies[tracingID]);
-            reps = count_reps(body, threshold_flag);
+            reps = countReps(body, threshold_flag);
         }
         return reps;
     }
 
-    function animateCanvas1(bufferBodyFrames, tracingID, source='') {
+     function animateCanvas1(bufferBodyFrames, tracingID){
         var i = 0;
-        var TimerID = setInterval(function () {
-            update
-   Canvas(bufferBodyFrames[i], tracingID);
-            i++;
-            if (i >= bufferBodyFrames.length) {
-                i = 0;
-            }
-        }, 20);
+        var TimerID = setInterval(function(){
+          updateCanvas(bufferBodyFrames[i], tracingID);
+          i++;
+          if (i>=bufferBodyFrames.length){i=0;}
+        },20);
         return TimerID;
+      }
+
+    function getExerciseInfo(exercise){
+        exercise_info = {
+            'hand_raise': [11, 'up'],
+            'squat': [0, 'down'],
+        }
+        return exercise_info[exercise];
     }
 });
