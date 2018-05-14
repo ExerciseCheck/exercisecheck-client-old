@@ -31,6 +31,7 @@ if(kinect.open()) {
 	var actionStart = false;
 	var actionTimeCount = 3, actionLastTime=0;
 	var last_recJoints = null;
+	var lsq_threshold = 1;
 	var python_running = false, python_result =[100, [1]];
 
 	// Start Time for the test
@@ -146,7 +147,7 @@ if(kinect.open()) {
       else{
 		    lastFrameMicroS = currentTimeMicroS;
       }
-		  if(currentTime != lastSecond){
+		  if(currentTime !== lastSecond){
 		    //console.log("FPS: ", fps);
 		    fps = 1;
 		    lastSecond = currentTime;
@@ -193,9 +194,13 @@ if(kinect.open()) {
                   x.push([joints1[point_index].depthX, joints1[point_index].depthY, 1]);
                   y.push([joints2[point_index].depthX, joints2[point_index].depthY, 1]);
                 });
-                python_result = lstsq(x, y);
-                if(python_result[0] < 1){
-                  console.log("Passed posture detection using least square");
+
+                // Different way to calculate least square
+                //python_result = lstsq(x, y);
+                lstsq_python(joints1, joints2);
+
+                if(python_result[0] < lsq_threshold){
+                  console.log("Passed posture detection using least square: ", python_result[0]);
                   actionStart = true;
                 }
               } // End of if (gtArray.length > 0) : if
@@ -415,6 +420,13 @@ function lstsq(X, Y)
     w_n = numeric.dot(w_n, numeric.transpose(X));
     //dot y
     w_n = numeric.dot(w_n, Y_n);
+
+    var array_length = w_n.length;
+    var temp_array = [];
+    for(var i=0; i< array_length;i++){
+      temp_array[i] = w_n[i][0];
+    }
+    w_n = temp_array;
     W[n] = w_n;
   }
   W = numeric.transpose(W);
