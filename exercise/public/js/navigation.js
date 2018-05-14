@@ -19,6 +19,12 @@ $(document).ready(function () {
     socket.emit('dataLabelFromClient', 3);
   });
 
+  document.getElementById("lsq_threshold").onchange = function(){
+    var select_threshold = document.getElementById("lsq_threshold");
+    var selected_value = select_threshold.options[select_threshold.selectedIndex].value;
+    socket.emit('setLsqThreshold', selected_value);
+  };
+
   $("#report").click(function () {
     console.log('report button pressed!');
     location.href = "report.html";

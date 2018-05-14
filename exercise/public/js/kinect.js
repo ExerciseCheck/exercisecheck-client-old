@@ -37,6 +37,11 @@ $(document).ready(function () {
     document.getElementById("display").style.display = 'none';
   });
 
+  // Display current threshold
+  socket.on('lsqThreshold_update', function(new_lsqThreshold){
+    document.getElementById("lsq_threshold_display").innerHTML = "lsqThreshold: "+(typeof new_lsqThreshold === "string"?new_lsqThreshold:new_lsqThreshold.toString());
+  });
+
   // Display and replay recorded body frames
   socket.on('disp', function(bufferBodyFrames,systemState, tracingID, activityLabeled){
     clientActive = true; // unlock the button

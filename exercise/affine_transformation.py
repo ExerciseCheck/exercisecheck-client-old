@@ -17,8 +17,8 @@ def affine_transformation():
 	unpad = lambda x: x[:, :-1]
 	
 	# Use numpy to pad them so we can have affine transformation and translation at the same time
-	pad_x = pad(x)
-	pad_y = pad(y)
+	pad_x = x#pad(x)
+	pad_y = y#pad(y)
 	
 	# Calculate the least squares for pad_x and pad_y
 	A, _, _, _ = np.linalg.lstsq(pad_x, pad_y, rcond=None)

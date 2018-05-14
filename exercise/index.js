@@ -17,6 +17,7 @@ if(kinect.open()) {
 	console.log('Point your browser to http://localhost:8000');
 	app.use(express.static('public'));
 
+
 	// Initiation
 
 	// States and sub-state, global variables in server
@@ -26,13 +27,7 @@ if(kinect.open()) {
 	// Data Storage, global variables in server
 	var	bufferTrial= [], // trial is a number of activities, including ground truth (gt) and exercises
 			bufferBodyFrames =[], gtArray = [], exArray = [];
-	// Use this to find out current position we reached in reference.
-	var refPos = 0;
-	var actionStart = false;
-	var actionTimeCount = 3, actionLastTime=0;
-	var last_recJoints = null;
-	var lsq_threshold = 1;
-	var python_running = false, python_result =[100, [1]];
+  var python_running = false;
 
 	// Start Time for the test
 	var startTime, duration;
@@ -43,6 +38,17 @@ if(kinect.open()) {
 
 	// Connection On:
 	io.on('connection', function(socket){
+	  var timeCostInMatchingPose = 0;
+	  var lastMatchingPoseTime = 0;
+    // Only play with lsq_threshold through following functions
+    var lsq_threshold = 1;
+    // Use this to find out current position we reached in reference.
+    var refPos = 0;
+    var actionStart = false;
+    var actionTimeCount = 3, actionLastTime=0;
+    var last_recJoints = null;
+    var python_result =[100, [1]];
+
 		++clients;
 		console.log('a user connected');
 		// systemState could be 0..3 during connection event, but only 2 needs signal emission
@@ -64,6 +70,8 @@ if(kinect.open()) {
 					actionStart=false;
 					headStart=false;
 					actionTimeCount=3;
+					timeCostInMatchingPose = 0;
+					lastMatchingPoseTime = new Date().getTime();
 					break;
 
 				case 2: // 1->2, Push the BodyFrames Data to the current trial
@@ -114,6 +122,11 @@ if(kinect.open()) {
 			save2xlsx(bufferTrial,gtArray,exArray,filename);
 		});
 
+    socket.on('setLsqThreshold', function(threshold){
+      lsqTheshold_update(threshold);
+      console.log("Set least square threshold to: ", lsqThreshold_get());
+    });
+
 		socket.on('curveRequest',function(gtInd,exInd,jt,datatype){
 			var curveData = curveAnalyze(bufferTrial,gtArray,exArray,gtInd,exInd,jt,datatype);
 			socket.emit('curveResult',curveData);
@@ -139,8 +152,8 @@ if(kinect.open()) {
 		var lastFrameMicroS = 0;
 		// States
 		kinect.on('bodyFrame', function(bodyFrame){
-		  var currentTime = (new Date().getTime()/1000).toFixed(0);
-		  var currentTimeMicroS = (new Date().getTime()).toFixed(0);
+		  var currentTime = parseFloat((new Date().getTime()/1000).toFixed(0));
+		  var currentTimeMicroS = parseFloat((new Date().getTime()).toFixed(0));
 		  if (currentTimeMicroS - lastFrameMicroS < 80){
 		    return;
       }
@@ -182,6 +195,18 @@ if(kinect.open()) {
             // Condition 2: Position start, given head is ready
             if (headReady){
               if (gtArray.length > 0) {
+                // Update time cost in matching pose
+                timeCostInMatchingPose = timeCostInMatchingPose + (((new Date().getTime() - lastMatchingPoseTime)/1000));
+                lastMatchingPoseTime = new Date().getTime();
+                // If cost a long time in matching, increase least square threshold
+                console.log("Cost in Matching: ",timeCostInMatchingPose);
+                if(timeCostInMatchingPose > 3){
+                  timeCostInMatchingPose = 0;
+                  var last_lsqTh = lsqThreshold_get();
+                  if (last_lsqTh <= 0.99) {
+                    lsqTheshold_update(last_lsqTh + 0.01);
+                  }
+                }
                 // Use least square (affine transformation) to compare similarity between current position with ref
                 var body_index = locateBodyTrackedIndex([bufferTrial[gtArray[gtArray.length - 1]][0]]);
                 var frameBody_index = locateBodyTrackedIndex([bodyFrame]);
@@ -196,10 +221,10 @@ if(kinect.open()) {
                 });
 
                 // Different way to calculate least square
-                //python_result = lstsq(x, y);
-                lstsq_python(joints1, joints2);
+                python_result = lstsq(x, y);
+                //lstsq_python(x, y);
 
-                if(python_result[0] < lsq_threshold){
+                if(python_result[0] < lsqThreshold_get()){
                   console.log("Passed posture detection using least square: ", python_result[0]);
                   actionStart = true;
                 }
@@ -319,7 +344,14 @@ if(kinect.open()) {
 		socket.on('disconnect',function(){
 			console.log('a user disconnect');
 			--clients;
-		})
+		});
+
+    // Help functions
+    function lsqThreshold_get(){return lsq_threshold;}
+    function lsqTheshold_update(new_value){
+      lsq_threshold = (typeof new_value === "number")?new_value:parseFloat(new_value);
+      socket.emit("lsqThreshold_update", lsqThreshold_get());
+    }
 	}); // end of io.on('connection',function)
 }//end of kinect.open()
 
@@ -436,22 +468,15 @@ function lstsq(X, Y)
   var err = 0;
   for (i = 0; i < After_trans.length; i++){
     for (j = 0; j < After_trans[0].length; j++){
-      err = (After_trans[i][j] - Y[i][j]) ** 2;
+      err = err + (After_trans[i][j] - Y[i][j]) ** 2;
     }
   }
   var result = [err, W];
   return result;
 }
 
-function lstsq_python(joints1, joints2){
+function lstsq_python(x, y){
   if (!python_running) {
-    python_running = true;
-    var points_list = [...Array(Math.min(joints1.length, joints2.length)).keys()];
-    var x = [], y = [];
-    points_list.map(function (point_index) {
-      x.push([joints1[point_index].depthX, joints1[point_index].depthY]);
-      y.push([joints2[point_index].depthX, joints2[point_index].depthY]);
-    });
     var affine_py = spawn('python', ['affine_transformation.py']);
     var output = null;
     affine_py.on('error', function (err) {
