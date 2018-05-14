@@ -128,8 +128,14 @@ $(document).ready(function () {
         var reps = 0;
 
         // Know what the important joint is based on exercise (eg squat)
-        var joint = getExerciseInfo(document.getElementById("exercise").value)[0];
-        var current_pt = body.joints[joint].depthY*height;
+        var exInfo = getExerciseInfo(document.getElementById("exercise").value);
+        var joint = exInfo[0];
+        var coordinate = exInfo[2];
+        var current_pt = body.joints[joint][coordinate]*height;
+
+        // 500 and 600 are temp values for testing
+        // Probably need to define thresholds in exerciseInfo for intial reference
+        // For exercise, should be based on reference
         if ((threshold_flag == 'down') && (current_pt < 500)){
             reps++;
             return [reps,'up'];
@@ -174,6 +180,7 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
+    // Draw every new bodyframe on the canvas
     function updateCanvas(bodyFrame, tracingID, mode='', threshold_flag='') {
         ctx1.clearRect(0, 0, width, height);
         var reps = 0;
@@ -193,7 +200,7 @@ $(document).ready(function () {
         return reps;
     }
 
-     function animateCanvas1(bufferBodyFrames, tracingID){
+    function animateCanvas1(bufferBodyFrames, tracingID){
         var i = 0;
         var TimerID = setInterval(function(){
           updateCanvas(bufferBodyFrames[i], tracingID);
@@ -203,10 +210,12 @@ $(document).ready(function () {
         return TimerID;
       }
 
+
+    // Get info from JSON about a given exercise like salient joint, direction of reps, etc.
     function getExerciseInfo(exercise){
         exercise_info = {
-            'hand_raise': [11, 'up'],
-            'squat': [0, 'down'],
+            'hand_raise': [11, 'up', 'depthY'],
+            'squat': [0, 'down', 'depthY'],
         }
         return exercise_info[exercise];
     }
