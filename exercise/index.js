@@ -154,11 +154,32 @@ if (kinect.open()) {
         socket.on('disconnect', function () {
             console.log('a user disconnect');
             --clients;
-        })
+        });
     });
 
 
 // Helper functions
+
+function get_ref_info(bufferTrial){
+    // Used for testing for max, min vals for reps
+    var temp_pts = {'neck_y':[],'squat_y':[]}
+    var buffer_temp = bufferTrial[0];
+    //console.log(buffer_temp);
+    for (var i =0; i < buffer_temp.length; i++){
+        var bodies_temp = buffer_temp[i]['bodies'];
+        for (var j = 0; j < bodies_temp.length; j++){
+            if (bodies_temp[j].hasOwnProperty('joints')){
+                var temp_bj = bodies_temp[j]['joints'];
+                temp_pts['neck_y'].push(temp_bj[2]['depthY'])
+                temp_pts['squat_y'].push(temp_bj[0]['depthY'])
+            }
+        }
+    }
+    console.log('min squat', Math.min.apply(Math, temp_pts['squat_y'].filter(Boolean)))
+    console.log('max squat', Math.max.apply(Math,temp_pts['squat_y'].filter(Boolean)))
+    console.log('min neck', Math.min.apply(Math,temp_pts['neck_y'].filter(Boolean)))
+    console.log('max neck', Math.max.apply(Math,temp_pts['neck_y'].filter(Boolean)))
+}
 
 // Define the legal move between states
     function StateTrans(st) {
@@ -435,7 +456,7 @@ if (kinect.open()) {
                 curveData.xticks.push("");
             }
         }
-        //	"xticks": ["1", "", "", "", "", "6", "", "", "", "", "11"],
+        //  "xticks": ["1", "", "", "", "", "6", "", "", "", "", "11"],
 
         return curveData;
     }
@@ -545,56 +566,4 @@ if (kinect.open()) {
         }
         return barData;
     }
-/* Reference
-Look-up for joint selection
-Kinect2.JointType = {
- spineBase       : 0,
- spineMid        : 1,
- neck            : 2,
- head            : 3,
- shoulderLeft    : 4,
- elbowLeft       : 5,
- wristLeft       : 6,
- handLeft        : 7,
- shoulderRight   : 8,
- elbowRight      : 9,
- wristRight      : 10,
- handRight       : 11,
- hipLeft         : 12,
- kneeLeft        : 13,
- ankleLeft       : 14,
- footLeft        : 15,
- hipRight        : 16,
- kneeRight       : 17,
- ankleRight      : 18,
- footRight       : 19,
- spineShoulder   : 20,
- handTipLeft     : 21,
- thumbLeft       : 22,
- handTipRight    : 23,
- thumbRight      : 24
-};
-
-
-Structure of bodyFrame
-bodyFrame = {
-bodies:[
-0:
-	bodyIndex: 0
-	joints: Array(25) [{depthX, depthY... orientationZ},{depthX, depthY... orientationZ} ]
-	leftHandState: 0
-	rightHandState: 0
-	tracked: true
-	trackingID: "7200399405055"
-1:
-	bodyIndex: 1
-	tracked: false
-...
-]
-floorClipPlane: {
-	w:
-	x:
-	y:
-	z:
 }
-*/
