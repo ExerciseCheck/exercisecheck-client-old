@@ -34,7 +34,7 @@ $(document).ready(function () {
         if (!threshold_flag){
 
             // Based on exercise (eg squat), know which direction we start counting reps in
-            threshold_flag = getExerciseInfo(document.getElementById("exercise").value)[1];
+            threshold_flag = getExerciseInfo(document.getElementById("exercise").value)['direction'];
         }
         temp_reps = updateCanvas(bodyFrame, tracingID, 'rec', threshold_flag);
         if (temp_reps){
@@ -90,8 +90,9 @@ $(document).ready(function () {
         jointType.forEach(function (jointType) {
             drawJoints(body.joints[jointType].depthX * width, body.joints[jointType].depthY * height);
         });
+        
 
-        drawCenterCircle(width / 2, height / 5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
+        drawCenterCircle(width / 2, height / 5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height, body.joints[2].cameraZ, body.joints[19].depthY, body.joints[0].depthY);
 
         ctx1.beginPath();
         ctx1.moveTo(body.joints[7].depthX * width, body.joints[7].depthY * height);
@@ -114,13 +115,16 @@ $(document).ready(function () {
     }
 
     // Draw center circle - to help user position themselves
-    function drawCenterCircle(x, y, r, nx, ny) {
+    function drawCenterCircle(x, y, r, nx, ny,nz, footright, spinebase) {
         ctx1.beginPath();
         if (nx > x - r && nx < x + r && ny > y - r && ny < y + r) {
             ctx1.strokeStyle = "green";
             if (!neck_y || !neck_x){
                 neck_x = nx/width;
                 neck_y = ny/height;
+                console.log('neck_y', neck_y)
+                console.log('footright', footright)
+                console.log('spinebase', spinebase)
             }
         } else {
             ctx1.strokeStyle = "red";
@@ -132,18 +136,19 @@ $(document).ready(function () {
         ctx1.strokeStyle = "black";
     }
 
+    // Function parameters: range_scale is how much to scale the distance between spine and foot,
+    // top_thresh and bottom_thresh are the thresholds the user should reach when the signal 
+    // has been scaled to a range between 0 and 1, for a repetition to count
 
-    function countReps(body, threshold_flag){
+    function countReps(body, threshold_flag, range_scale=0.7, top_thresh=0.25, bottom_thresh=0.75){
         var reps = 0;
         var norm;
 
-        // Get info based on exercise (eg squat)
+        // Get info based on exercise (default is squat)
+        // This should eventually be a db call
         var exInfo = getExerciseInfo(document.getElementById("exercise").value);
-        var joint = exInfo[0];
-        var coordinate = exInfo[2];
-
-        // need to figure out how to set this non-arbitrarily 
-        var error = 0.22;
+        var joint = exInfo['joint'];
+        var coordinate = exInfo['axis'];
         
         // This is set when user is correctly positioned in circle
         if (coordinate == 'depthY') {
@@ -152,13 +157,18 @@ $(document).ready(function () {
             norm = neck_x;
         }
 
-        // Normalize to neck
-        var current_pt = (body.joints[joint][coordinate] - norm)*height;
+        // Normalize reference points to neck
+        var ref_norm = exInfo['ref_neck'];
+        var ref_max = exInfo['ref_max'] - ref_norm;
+        var ref_min = exInfo['ref_min'] - ref_norm;
 
-        // Normalize to neck in reference
-        var ref_norm = exInfo[5];
-        var top_thresh = height*(exInfo[3]-ref_norm + error);
-        var bottom_thresh = height*(exInfo[4]-ref_norm - error);
+        // Range is based on distance between foot and spine 
+        var ref_foot = exInfo['ref_foot'];
+        var ref_spine = exInfo['ref_spine'];
+        var range = (ref_foot - ref_norm - ref_spine)*range_scale;
+
+        // Normalize current point by range and current neck value
+        var current_pt = (body.joints[joint][coordinate] - norm - ref_max)/range;
         
         if ((threshold_flag == 'down') && (current_pt < top_thresh)){
             reps++;
@@ -219,7 +229,8 @@ $(document).ready(function () {
                 }
             });
         } else {
-            drawBody(bodyFrame.bodies[tracingID]);
+            var body = bodyFrame.bodies[tracingID];
+            drawBody(body);
             reps = countReps(body, threshold_flag);
         }
         return reps;
@@ -236,14 +247,30 @@ $(document).ready(function () {
       }
 
 
-    // Get info from JSON about a given exercise like salient joint, direction of reps, etc.
-    // this info should eventually be stored in a db
+    // Get info from JSON about a given exercise 
     function getExerciseInfo(exercise){
-        //most important joint, starting direction of rep, min val in ref, max val in ref, min neck in ref, max neck in ref
+        // This info should be patient-specific and eventually stored in the db
         exercise_info = {
-            'hand_raise': [11, 'down', 'depthY'],
-            'squat': [0, 'up', 'depthY', 0.54, 1.03, 0.21, 0.71],
-
+            'hand_raise': 
+                {'joint': 11, 
+                'direction': 'down', 
+                'axis': 'depthY',
+                'ref_max': 0.73,
+                'ref_min': 1.19,
+                'ref_mean': 0.76,
+                'ref_neck': 0.27,
+                },
+            'squat':
+                {'joint': 0, 
+                'direction': 'up', 
+                'axis': 'depthY',
+                'ref_max': 0.68,
+                'ref_min': 1.13,
+                'ref_mean': 0.76,
+                'ref_neck': 0.27,
+                'ref_foot': 1.43,
+                'ref_spine': 0.70
+                },            
         }
         return exercise_info[exercise];
     }

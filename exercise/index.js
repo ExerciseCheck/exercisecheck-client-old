@@ -82,6 +82,7 @@ if (kinect.open()) {
             }
             if (num == 1) {
                 gtArray.push(testID);
+                get_ref_info(bufferTrial);
             }
             else {
                 if (num == 2) {
@@ -160,410 +161,426 @@ if (kinect.open()) {
 
 // Helper functions
 
-function get_ref_info(bufferTrial){
+function get_ref_info(bufferTrial, joint=0){
     // Used for testing for max, min vals for reps
     var temp_pts = {'neck_y':[],'squat_y':[]}
     var buffer_temp = bufferTrial[0];
-    //console.log(buffer_temp);
+
     for (var i =0; i < buffer_temp.length; i++){
         var bodies_temp = buffer_temp[i]['bodies'];
         for (var j = 0; j < bodies_temp.length; j++){
             if (bodies_temp[j].hasOwnProperty('joints')){
                 var temp_bj = bodies_temp[j]['joints'];
                 temp_pts['neck_y'].push(temp_bj[2]['depthY'])
-                temp_pts['squat_y'].push(temp_bj[0]['depthY'])
+                temp_pts['squat_y'].push(temp_bj[joint]['depthY'])
             }
         }
     }
+
+    // Save full signal to json
+    require('fs').writeFile(
+        './reference.json',
+
+        JSON.stringify(temp_pts['squat_y']),
+
+        function (err) {
+            if (err) {
+                console.error('Error in saving file');
+            }
+        }
+    );
+
+    // Log max, min, average to console
+    const average = arr => arr.reduce( ( p, c ) => p + c, 0 ) / arr.length;
+
     console.log('min squat', Math.min.apply(Math, temp_pts['squat_y'].filter(Boolean)))
     console.log('max squat', Math.max.apply(Math,temp_pts['squat_y'].filter(Boolean)))
-    console.log('min neck', Math.min.apply(Math,temp_pts['neck_y'].filter(Boolean)))
-    console.log('max neck', Math.max.apply(Math,temp_pts['neck_y'].filter(Boolean)))
+    console.log('mean squat', average(temp_pts['squat_y'].filter(Boolean)))
 }
 
 // Define the legal move between states
-    function StateTrans(st) {
-        return (st + 1) % 3;
-    }
+function StateTrans(st) {
+    return (st + 1) % 3;
+}
 
-    function locateBodyTrackedIndex(bufferBodyFrames) {
-        var ind = -1;
-        for (var i = 0; i <= 5; i++) {
-            if (bufferBodyFrames[0].bodies[i].tracked) { // tracked in the first frame
-                ind = i;
-                break;
-            }
+function locateBodyTrackedIndex(bufferBodyFrames) {
+    var ind = -1;
+    for (var i = 0; i <= 5; i++) {
+        if (bufferBodyFrames[0].bodies[i].tracked) { // tracked in the first frame
+            ind = i;
+            break;
         }
-        return ind;
     }
+    return ind;
+}
 
-    function typeofTest(bufferTrial, id) {
-        var type // 0: Hand, 1: Squat
-        if (getAmplitudeY(bufferTrial, id, 0) > 0.15) //Base of spine moves > 0.15m
-        {
-            type = "Squat";
+function typeofTest(bufferTrial, id) {
+    var type // 0: Hand, 1: Squat
+    if (getAmplitudeY(bufferTrial, id, 0) > 0.15) //Base of spine moves > 0.15m
+    {
+        type = "Squat";
+    }
+    else {
+        type = "Hand";
+    }
+    return type;
+}
+
+function getRaw(bufferTrial, id, jt, datatype) {
+    var frames = bufferTrial[id];
+    var ind = frames.bodyIndex, time = frames.durationsecs;
+    var rawdata = []
+    for (var i = 0; i < frames.length; i++) {
+        if (datatype == 0) {
+            rawdata.push(frames[i].bodies[ind].joints[jt].cameraX);
+        }
+        if (datatype == 1) {
+            rawdata.push(frames[i].bodies[ind].joints[jt].cameraY);
+        }
+        if (datatype == 2) {
+            rawdata.push(frames[i].bodies[ind].joints[jt].cameraZ);
         }
         else {
-            type = "Hand";
+            var x = frames[i].bodies[ind].joints[jt].orientationX;
+            var y = frames[i].bodies[ind].joints[jt].orientationY;
+            var z = frames[i].bodies[ind].joints[jt].orientationZ;
+            var w = frames[i].bodies[ind].joints[jt].orientationW;
+
+            var T_x = 180 + 180 / 3.1416 * Math.atan2(2 * y * z + 2 * x * w, 1 - 2 * x * x - 2 * y * y); // leaning forward/backward
+            var T_y = 180 / 3.1416 * Math.asin(2 * y * w - 2 * x * z);                   // turning
+            var T_z = 180 + 180 / 3.1416 * Math.atan2(2 * x * y + 2 * z * w, 1 - 2 * y * y - 2 * z * z); // leaning left
+            while (T_x > 90) {
+                T_x += -180;
+            }
+            if (T_y > 180) {
+                T_y += -180;
+            }
+            if (T_z > 180) {
+                T_z += -180;
+            }
+            if (datatype == 3) {
+                rawdata.push(T_x);
+            }
+            if (datatype == 4) {
+                rawdata.push(T_y);
+            }
+            if (datatype == 5) {
+                rawdata.push(T_z);
+            }
+
         }
-        return type;
+    }
+    return rawdata;
+}
+
+function getSpeed(bufferTrial, id, jt) {
+    var frames = bufferTrial[id];
+    var ind = frames.bodyIndex;
+    var time = frames.durationsecs;
+    var accumDist = 0;
+    for (var i = 0; i < frames.length - 1; i++) {
+        if (!frames[i + 1].bodies[ind]) {
+            continue;
+        }
+        var current_joint = frames[i + 1].bodies[ind].joints[jt];
+        var prev_joint = frames[i].bodies[ind].joints[jt];
+        var distance_x = current_joint.cameraX - prev_joint.cameraX;
+        var distance_y = current_joint.cameraY - prev_joint.cameraY;
+        var distance_z = current_joint.cameraZ - prev_joint.cameraZ;
+        var dist = Math.sqrt(Math.pow(distance_x, 2) + Math.pow(distance_y, 2) + Math.pow(distance_z, 2));
+        if (dist) {
+            accumDist = accumDist + dist;
+        }
+    }
+    return accumDist / time;
+}
+
+function getAmplitudeX(bufferTrial, getSpeedid, jt) {
+    var ListX = getRaw(bufferTrial, id, jt, 0)
+    var DistX = (Math.max(...ListX) - Math.min(...ListX
+))
+    ;
+    return DistX;
+}
+
+function getAmplitudeY(bufferTrial, id, jt) {
+    var ListY = getRaw(bufferTrial, id, jt, 1)
+    var DistY = (Math.max(...ListY) - Math.min(...ListY
+))
+    ;
+    return DistY;
+}
+
+function getAmplitudeZ(bufferTrial, id, jt) {
+    var ListZ = getRaw(bufferTrial, id, jt, 2)
+    var DistZ = (Math.max(...ListZ) - Math.min(...ListZ
+))
+    ;
+    return DistZ;
+}
+
+function getOrientation(bufferTrial, id, jt) {
+    var RotX = getRaw(bufferTrial, id, jt, 3);
+    var maxRot = Math.max(...RotX
+),
+    minRot = Math.min(...RotX
+)
+    var lean = Math.abs(maxRot - minRot);
+    return lean;
+}
+
+function save2xlsx(bufferTrial, gtArray, exArray, filename) {
+
+    var wb = new Workbook(); //Create new wb object
+    for (var i in gtArray) {
+        var ws_name = "GT_" + (i).toString();
+        var ws = sheet_from_bufferTrial(bufferTrial[gtArray[i]], ws_name);
+        wb.SheetNames.push(ws_name);
+        wb.Sheets[ws_name] = ws;
+    }
+    for (var i in exArray) {
+        var ws_name = "EX_" + (i).toString();
+        var ws = sheet_from_bufferTrial(bufferTrial[exArray[i]], ws_name);
+        wb.SheetNames.push(ws_name);
+        wb.Sheets[ws_name] = ws;
+    }
+    var wbout = XLSX.write(wb, {bookType: 'xlsx', bookSST: false, type: 'binary'}); //Define workbook type
+    XLSX.writeFile(wb, filename); //Write workbook
+}
+
+function Workbook() {
+    if (!(this instanceof Workbook)) return new Workbook(); //Create new instance of workbook type
+    this.SheetNames = [];
+    this.Sheets = {};
+}
+
+function sheet_from_bufferTrial(bufferBodyFrames, ws_name) {
+    var ws = {};
+    var range = {s: {c: 0, r: 0}, e: {c: 275, r: 500}};
+    skeleton = 0; //Track which skeleton # it is out of the maximum 6
+    for (var i = 0; i < bufferBodyFrames[0].bodies.length; i++) {
+        if (bufferBodyFrames[0].bodies[i].tracked) {
+            skeleton = i;
+            break;
+        }
     }
 
-    function getRaw(bufferTrial, id, jt, datatype) {
-        var frames = bufferTrial[id];
-        var ind = frames.bodyIndex, time = frames.durationsecs;
-        var rawdata = []
-        for (var i = 0; i < frames.length; i++) {
-            if (datatype == 0) {
-                rawdata.push(frames[i].bodies[ind].joints[jt].cameraX);
-            }
-            if (datatype == 1) {
-                rawdata.push(frames[i].bodies[ind].joints[jt].cameraY);
-            }
-            if (datatype == 2) {
-                rawdata.push(frames[i].bodies[ind].joints[jt].cameraZ);
-            }
-            else {
-                var x = frames[i].bodies[ind].joints[jt].orientationX;
-                var y = frames[i].bodies[ind].joints[jt].orientationY;
-                var z = frames[i].bodies[ind].joints[jt].orientationZ;
-                var w = frames[i].bodies[ind].joints[jt].orientationW;
-
-                var T_x = 180 + 180 / 3.1416 * Math.atan2(2 * y * z + 2 * x * w, 1 - 2 * x * x - 2 * y * y); // leaning forward/backward
-                var T_y = 180 / 3.1416 * Math.asin(2 * y * w - 2 * x * z);                   // turning
-                var T_z = 180 + 180 / 3.1416 * Math.atan2(2 * x * y + 2 * z * w, 1 - 2 * y * y - 2 * z * z); // leaning left
-                while (T_x > 90) {
-                    T_x += -180;
-                }
-                if (T_y > 180) {
-                    T_y += -180;
-                }
-                if (T_z > 180) {
-                    T_z += -180;
-                }
-                if (datatype == 3) {
-                    rawdata.push(T_x);
-                }
-                if (datatype == 4) {
-                    rawdata.push(T_y);
-                }
-                if (datatype == 5) {
-                    rawdata.push(T_z);
-                }
-
+    for (var R = 0; R < bufferBodyFrames.length; R++) {
+        var column = 0; // Goes upto 275, i.e. 25 x 11
+        for (var C = 0; C < bufferBodyFrames[R].bodies[skeleton].joints.length; C++) {
+            for (var attributename in bufferBodyFrames[R].bodies[skeleton].joints[C]) {
+                var cell = {v: bufferBodyFrames[R].bodies[skeleton].joints[C][attributename]};
+                if (cell.v == null) continue;
+                var cell_ref = XLSX.utils.encode_cell({c: column, r: R});
+                if (typeof cell.v === 'number') cell.t = 'n';
+                else if (typeof cell.v === 'boolean') cell.t = 'b';
+                else cell.t = 's';
+                ws[cell_ref] = cell;
+                column++;
             }
         }
-        return rawdata;
+    }
+    ws['!ref'] = XLSX.utils.encode_range(range);
+    return ws;
+}
+
+function chartAnalyze(bufferTrial, gtArray, exArray) {
+    var gtLabel = [], exLabel = [];
+    for (var i in gtArray) {
+        gtLabel.push("GT_" + (i).toString());
+    }
+    for (var i in exArray) {
+        exLabel.push("EX_" + (i).toString());
     }
 
-    function getSpeed(bufferTrial, id, jt) {
-        var frames = bufferTrial[id];
-        var ind = frames.bodyIndex;
-        var time = frames.durationsecs;
-        var accumDist = 0;
-        for (var i = 0; i < frames.length - 1; i++) {
-            if (!frames[i + 1].bodies[ind]) {
-                continue;
-            }
-            var current_joint = frames[i + 1].bodies[ind].joints[jt];
-            var prev_joint = frames[i].bodies[ind].joints[jt];
-            var distance_x = current_joint.cameraX - prev_joint.cameraX;
-            var distance_y = current_joint.cameraY - prev_joint.cameraY;
-            var distance_z = current_joint.cameraZ - prev_joint.cameraZ;
-            var dist = Math.sqrt(Math.pow(distance_x, 2) + Math.pow(distance_y, 2) + Math.pow(distance_z, 2));
-            if (dist) {
-                accumDist = accumDist + dist;
+    var chartData = [
+        {"Name": "Duration (seconds)",},
+        {"Name": "Type",},
+        {"Name": "Left Wrist Speed (m/s)"},
+        {"Name": "Left Wrist Height Change (m)"},
+        {"Name": "Right Wrist Speed (m/s)"},
+        {"Name": "Right Wrist Height Change (m)"},
+        {"Name": "Pelvic Speed (m/s)"},
+        {"Name": "Pelvic Height Change (m)"},
+        {"Name": "Trunk Leaning (degrees)"},
+        {"Name": "Hip A-P Movement (m)"},
+    ];
+    // Duration
+    for (var i in gtArray) {
+        chartData[0][gtLabel[i]] = bufferTrial[gtArray[i]].duration;
+        chartData[1][gtLabel[i]] = typeofTest(bufferTrial, gtArray[i]);
+        chartData[2][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 6).toFixed(2);
+        chartData[3][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 6).toFixed(2);
+        chartData[4][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 10).toFixed(2);
+        chartData[5][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 10).toFixed(2);
+        chartData[6][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 0).toFixed(2);
+        chartData[7][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 0).toFixed(2);
+        chartData[8][gtLabel[i]] = getOrientation(bufferTrial, gtArray[i], 1).toFixed(2);
+        chartData[9][gtLabel[i]] = getAmplitudeZ(bufferTrial, gtArray[i], 0).toFixed(2);
+    }
+    for (var i in exArray) {
+        chartData[0][exLabel[i]] = bufferTrial[exArray[i]].duration;
+        chartData[1][exLabel[i]] = typeofTest(bufferTrial, exArray[i]);
+        chartData[2][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 6).toFixed(2);
+        chartData[3][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 6).toFixed(2);
+        chartData[4][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 10).toFixed(2);
+        chartData[5][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 10).toFixed(2);
+        chartData[6][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 0).toFixed(2);
+        chartData[7][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 0).toFixed(2);
+        chartData[8][exLabel[i]] = getOrientation(bufferTrial, exArray[i], 1).toFixed(2);
+        chartData[9][exLabel[i]] = getAmplitudeZ(bufferTrial, exArray[i], 0).toFixed(2);
+    }
+    return chartData;
+}
+
+function curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype) {
+    var curveData = {};
+    var maxlength = 0;
+    curveData["numDataSets"] = gtInd.length + exInd.length;
+    curveData["labels"] = [];
+    curveData["dataset"] = [];
+    curveData["xticks"] = [];
+    if (gtInd.length > 0) {
+        for (var i = 0; i < gtInd.length; i++) {
+            curveData.labels.push("Referece_" + gtInd[i].toString());
+            var id = gtArray[gtInd[i]];
+            var rawdata = getRaw(bufferTrial, id, jt, datatype);
+            curveData.dataset.push(rawdata);
+            if (rawdata.length > maxlength) {
+                maxlength = rawdata.length
             }
         }
-        return accumDist / time;
     }
 
-    function getAmplitudeX(bufferTrial, getSpeedid, jt) {
-        var ListX = getRaw(bufferTrial, id, jt, 0)
-        var DistX = (Math.max(...ListX) - Math.min(...ListX
-    ))
-        ;
-        return DistX;
+    if (exInd.length > 0) {
+        for (var i = 0; i < exInd.length; i++) {
+            curveData.labels.push("Exercise_" + exInd[i].toString());
+            var id = exArray[exInd[i]];
+            var rawdata = getRaw(bufferTrial, id, jt, datatype);
+            curveData.dataset.push(rawdata);
+            if (rawdata.length > maxlength) {
+                maxlength = rawdata.length
+            }
+        }
     }
+    var numMarks = 10;
+    var pads = Math.ceil(maxlength / numMarks);
 
-    function getAmplitudeY(bufferTrial, id, jt) {
-        var ListY = getRaw(bufferTrial, id, jt, 1)
-        var DistY = (Math.max(...ListY) - Math.min(...ListY
-    ))
-        ;
-        return DistY;
+    for (var i = 0; i < numMarks; i++) {
+        var timeMark = (i * pads * 0.008342).toFixed(2);
+        curveData.xticks.push(timeMark.toString());
+        for (var j = 1; j < pads; j++) {
+            curveData.xticks.push("");
+        }
     }
+    //  "xticks": ["1", "", "", "", "", "6", "", "", "", "", "11"],
 
-    function getAmplitudeZ(bufferTrial, id, jt) {
-        var ListZ = getRaw(bufferTrial, id, jt, 2)
-        var DistZ = (Math.max(...ListZ) - Math.min(...ListZ
-    ))
-        ;
-        return DistZ;
+    return curveData;
+}
+
+function barAnalyze(bufferTrial, gtArray, exArray) {
+    var barData = {};
+    barData.leftHandSpeed = [];
+    barData.leftHandHeightChange = [];
+    barData.rightHandSpeed = [];
+    barData.rightHandHeightChange = [];
+    barData.pelvicSpeed = [];
+    barData.pelvicHeightChange = [];
+    barData.SpineMidOrientation = [];
+    barData.SpineBaseMovement = [];
+    var threshold = {
+        Speed: 0.005,
+        HeightChange: 0.005,
+        Orientation: 1,
+    };
+    var speed_jt6_gt = 0, height_jt6_gt = 0, speed_jt10_gt = 0, height_jt10_gt = 0,
+        speed_jt0_gt = 0, height_jt0_gt = 0;
+    var lean_jt1_gt = 0, ampZ_jt0_gt = 0;
+    for (var i in gtArray) {
+        speed_jt6_gt = getSpeed(bufferTrial, gtArray[i], 6);
+        height_jt6_gt += getAmplitudeY(bufferTrial, gtArray[i], 6);
+        speed_jt10_gt += getSpeed(bufferTrial, gtArray[i], 10);
+        height_jt10_gt += getAmplitudeY(bufferTrial, gtArray[i], 10);
+        speed_jt0_gt += getSpeed(bufferTrial, gtArray[i], 0);
+        height_jt0_gt += getAmplitudeY(bufferTrial, gtArray[i], 0);
+        lean_jt1_gt += getOrientation(bufferTrial, gtArray[i], 1);
+        ampZ_jt0_gt += getAmplitudeZ(bufferTrial, gtArray[i], 0);
     }
+    speed_jt6_gt /= gtArray.length;
+    height_jt6_gt /= gtArray.length;
+    speed_jt10_gt /= gtArray.length;
+    height_jt10_gt /= gtArray.length;
+    speed_jt0_gt /= gtArray.length;
+    height_jt0_gt /= gtArray.length;
+    lean_jt1_gt /= gtArray.length;
+    ampZ_jt0_gt /= gtArray.length;
 
-    function getOrientation(bufferTrial, id, jt) {
-        var RotX = getRaw(bufferTrial, id, jt, 3);
-        var maxRot = Math.max(...RotX
-    ),
-        minRot = Math.min(...RotX
-    )
-        var lean = Math.abs(maxRot - minRot);
-        return lean;
+    for (var i in exArray) {
+        var speed_jt6_ex = getSpeed(bufferTrial, exArray[i], 6);
+        if (Math.abs(speed_jt6_gt) < threshold.Speed) {
+            barData.leftHandSpeed.push(0);
+        }
+        else {
+            barData.leftHandSpeed.push((speed_jt6_ex - speed_jt6_gt) / speed_jt6_gt * 100);
+        }
+
+        var height_jt6_ex = getAmplitudeY(bufferTrial, exArray[i], 6);
+        if (Math.abs(height_jt6_gt) < threshold.HeightChange) {
+            barData.leftHandHeightChange.push(0);
+        }
+        else {
+            barData.leftHandHeightChange.push((height_jt6_ex - height_jt6_gt) / height_jt6_gt * 100);
+        }
+
+        var speed_jt10_ex = getSpeed(bufferTrial, exArray[i], 10);
+        if (Math.abs(speed_jt10_gt) < threshold.Speed) {
+            barData.rightHandSpeed.push(0);
+        }
+        else {
+            barData.rightHandSpeed.push((speed_jt10_ex - speed_jt10_gt) / speed_jt10_gt * 100);
+        }
+
+        var height_jt10_ex = getAmplitudeY(bufferTrial, exArray[i], 10);
+        if (Math.abs(height_jt10_gt) < threshold.HeightChange) {
+            barData.rightHandHeightChange.push(0);
+        }
+        else {
+            barData.rightHandHeightChange.push((height_jt10_ex - height_jt10_gt) / height_jt10_gt * 100);
+        }
+
+        var speed_jt0_ex = getSpeed(bufferTrial, exArray[i], 0);
+        if (Math.abs(speed_jt0_gt) < threshold.Speed) {
+            barData.pelvicSpeed.push(0);
+        }
+        else {
+            barData.pelvicSpeed.push((speed_jt0_ex - speed_jt0_gt) / speed_jt0_gt * 100);
+        }
+
+        var height_jt0_ex = getAmplitudeY(bufferTrial, exArray[i], 0);
+        if (Math.abs(height_jt0_gt) < threshold.HeightChange) {
+            barData.pelvicHeightChange.push(0);
+        }
+        else {
+            barData.pelvicHeightChange.push((height_jt0_ex - height_jt0_gt) / height_jt0_gt * 100);
+        }
+
+        var lean_jt1_ex = getOrientation(bufferTrial, exArray[i], 1);
+        if (Math.abs(lean_jt1_ex) < threshold.HeightChange) {
+            barData.SpineMidOrientation.push(0);
+        }
+        else {
+            barData.SpineMidOrientation.push((lean_jt1_ex - lean_jt1_gt) / lean_jt1_gt * 100);
+        }
+
+        var ampZ_jt0_ex = getAmplitudeZ(bufferTrial, exArray[i], 0);
+        if (Math.abs(ampZ_jt0_gt) < threshold.HeightChange) {
+            barData.SpineBaseMovement.push(0);
+        }
+        else {
+            barData.SpineBaseMovement.push((ampZ_jt0_ex - ampZ_jt0_gt) / ampZ_jt0_gt * 100);
+        }
+
     }
-
-    function save2xlsx(bufferTrial, gtArray, exArray, filename) {
-
-        var wb = new Workbook(); //Create new wb object
-        for (var i in gtArray) {
-            var ws_name = "GT_" + (i).toString();
-            var ws = sheet_from_bufferTrial(bufferTrial[gtArray[i]], ws_name);
-            wb.SheetNames.push(ws_name);
-            wb.Sheets[ws_name] = ws;
-        }
-        for (var i in exArray) {
-            var ws_name = "EX_" + (i).toString();
-            var ws = sheet_from_bufferTrial(bufferTrial[exArray[i]], ws_name);
-            wb.SheetNames.push(ws_name);
-            wb.Sheets[ws_name] = ws;
-        }
-        var wbout = XLSX.write(wb, {bookType: 'xlsx', bookSST: false, type: 'binary'}); //Define workbook type
-        XLSX.writeFile(wb, filename); //Write workbook
-    }
-
-    function Workbook() {
-        if (!(this instanceof Workbook)) return new Workbook(); //Create new instance of workbook type
-        this.SheetNames = [];
-        this.Sheets = {};
-    }
-
-    function sheet_from_bufferTrial(bufferBodyFrames, ws_name) {
-        var ws = {};
-        var range = {s: {c: 0, r: 0}, e: {c: 275, r: 500}};
-        skeleton = 0; //Track which skeleton # it is out of the maximum 6
-        for (var i = 0; i < bufferBodyFrames[0].bodies.length; i++) {
-            if (bufferBodyFrames[0].bodies[i].tracked) {
-                skeleton = i;
-                break;
-            }
-        }
-
-        for (var R = 0; R < bufferBodyFrames.length; R++) {
-            var column = 0; // Goes upto 275, i.e. 25 x 11
-            for (var C = 0; C < bufferBodyFrames[R].bodies[skeleton].joints.length; C++) {
-                for (var attributename in bufferBodyFrames[R].bodies[skeleton].joints[C]) {
-                    var cell = {v: bufferBodyFrames[R].bodies[skeleton].joints[C][attributename]};
-                    if (cell.v == null) continue;
-                    var cell_ref = XLSX.utils.encode_cell({c: column, r: R});
-                    if (typeof cell.v === 'number') cell.t = 'n';
-                    else if (typeof cell.v === 'boolean') cell.t = 'b';
-                    else cell.t = 's';
-                    ws[cell_ref] = cell;
-                    column++;
-                }
-            }
-        }
-        ws['!ref'] = XLSX.utils.encode_range(range);
-        return ws;
-    }
-
-    function chartAnalyze(bufferTrial, gtArray, exArray) {
-        var gtLabel = [], exLabel = [];
-        for (var i in gtArray) {
-            gtLabel.push("GT_" + (i).toString());
-        }
-        for (var i in exArray) {
-            exLabel.push("EX_" + (i).toString());
-        }
-
-        var chartData = [
-            {"Name": "Duration (seconds)",},
-            {"Name": "Type",},
-            {"Name": "Left Wrist Speed (m/s)"},
-            {"Name": "Left Wrist Height Change (m)"},
-            {"Name": "Right Wrist Speed (m/s)"},
-            {"Name": "Right Wrist Height Change (m)"},
-            {"Name": "Pelvic Speed (m/s)"},
-            {"Name": "Pelvic Height Change (m)"},
-            {"Name": "Trunk Leaning (degrees)"},
-            {"Name": "Hip A-P Movement (m)"},
-        ];
-        // Duration
-        for (var i in gtArray) {
-            chartData[0][gtLabel[i]] = bufferTrial[gtArray[i]].duration;
-            chartData[1][gtLabel[i]] = typeofTest(bufferTrial, gtArray[i]);
-            chartData[2][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 6).toFixed(2);
-            chartData[3][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 6).toFixed(2);
-            chartData[4][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 10).toFixed(2);
-            chartData[5][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 10).toFixed(2);
-            chartData[6][gtLabel[i]] = getSpeed(bufferTrial, gtArray[i], 0).toFixed(2);
-            chartData[7][gtLabel[i]] = getAmplitudeY(bufferTrial, gtArray[i], 0).toFixed(2);
-            chartData[8][gtLabel[i]] = getOrientation(bufferTrial, gtArray[i], 1).toFixed(2);
-            chartData[9][gtLabel[i]] = getAmplitudeZ(bufferTrial, gtArray[i], 0).toFixed(2);
-        }
-        for (var i in exArray) {
-            chartData[0][exLabel[i]] = bufferTrial[exArray[i]].duration;
-            chartData[1][exLabel[i]] = typeofTest(bufferTrial, exArray[i]);
-            chartData[2][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 6).toFixed(2);
-            chartData[3][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 6).toFixed(2);
-            chartData[4][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 10).toFixed(2);
-            chartData[5][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 10).toFixed(2);
-            chartData[6][exLabel[i]] = getSpeed(bufferTrial, exArray[i], 0).toFixed(2);
-            chartData[7][exLabel[i]] = getAmplitudeY(bufferTrial, exArray[i], 0).toFixed(2);
-            chartData[8][exLabel[i]] = getOrientation(bufferTrial, exArray[i], 1).toFixed(2);
-            chartData[9][exLabel[i]] = getAmplitudeZ(bufferTrial, exArray[i], 0).toFixed(2);
-        }
-        return chartData;
-    }
-
-    function curveAnalyze(bufferTrial, gtArray, exArray, gtInd, exInd, jt, datatype) {
-        var curveData = {};
-        var maxlength = 0;
-        curveData["numDataSets"] = gtInd.length + exInd.length;
-        curveData["labels"] = [];
-        curveData["dataset"] = [];
-        curveData["xticks"] = [];
-        if (gtInd.length > 0) {
-            for (var i = 0; i < gtInd.length; i++) {
-                curveData.labels.push("Referece_" + gtInd[i].toString());
-                var id = gtArray[gtInd[i]];
-                var rawdata = getRaw(bufferTrial, id, jt, datatype);
-                curveData.dataset.push(rawdata);
-                if (rawdata.length > maxlength) {
-                    maxlength = rawdata.length
-                }
-            }
-        }
-
-        if (exInd.length > 0) {
-            for (var i = 0; i < exInd.length; i++) {
-                curveData.labels.push("Exercise_" + exInd[i].toString());
-                var id = exArray[exInd[i]];
-                var rawdata = getRaw(bufferTrial, id, jt, datatype);
-                curveData.dataset.push(rawdata);
-                if (rawdata.length > maxlength) {
-                    maxlength = rawdata.length
-                }
-            }
-        }
-        var numMarks = 10;
-        var pads = Math.ceil(maxlength / numMarks);
-
-        for (var i = 0; i < numMarks; i++) {
-            var timeMark = (i * pads * 0.008342).toFixed(2);
-            curveData.xticks.push(timeMark.toString());
-            for (var j = 1; j < pads; j++) {
-                curveData.xticks.push("");
-            }
-        }
-        //  "xticks": ["1", "", "", "", "", "6", "", "", "", "", "11"],
-
-        return curveData;
-    }
-
-    function barAnalyze(bufferTrial, gtArray, exArray) {
-        var barData = {};
-        barData.leftHandSpeed = [];
-        barData.leftHandHeightChange = [];
-        barData.rightHandSpeed = [];
-        barData.rightHandHeightChange = [];
-        barData.pelvicSpeed = [];
-        barData.pelvicHeightChange = [];
-        barData.SpineMidOrientation = [];
-        barData.SpineBaseMovement = [];
-        var threshold = {
-            Speed: 0.005,
-            HeightChange: 0.005,
-            Orientation: 1,
-        };
-        var speed_jt6_gt = 0, height_jt6_gt = 0, speed_jt10_gt = 0, height_jt10_gt = 0,
-            speed_jt0_gt = 0, height_jt0_gt = 0;
-        var lean_jt1_gt = 0, ampZ_jt0_gt = 0;
-        for (var i in gtArray) {
-            speed_jt6_gt = getSpeed(bufferTrial, gtArray[i], 6);
-            height_jt6_gt += getAmplitudeY(bufferTrial, gtArray[i], 6);
-            speed_jt10_gt += getSpeed(bufferTrial, gtArray[i], 10);
-            height_jt10_gt += getAmplitudeY(bufferTrial, gtArray[i], 10);
-            speed_jt0_gt += getSpeed(bufferTrial, gtArray[i], 0);
-            height_jt0_gt += getAmplitudeY(bufferTrial, gtArray[i], 0);
-            lean_jt1_gt += getOrientation(bufferTrial, gtArray[i], 1);
-            ampZ_jt0_gt += getAmplitudeZ(bufferTrial, gtArray[i], 0);
-        }
-        speed_jt6_gt /= gtArray.length;
-        height_jt6_gt /= gtArray.length;
-        speed_jt10_gt /= gtArray.length;
-        height_jt10_gt /= gtArray.length;
-        speed_jt0_gt /= gtArray.length;
-        height_jt0_gt /= gtArray.length;
-        lean_jt1_gt /= gtArray.length;
-        ampZ_jt0_gt /= gtArray.length;
-
-        for (var i in exArray) {
-            var speed_jt6_ex = getSpeed(bufferTrial, exArray[i], 6);
-            if (Math.abs(speed_jt6_gt) < threshold.Speed) {
-                barData.leftHandSpeed.push(0);
-            }
-            else {
-                barData.leftHandSpeed.push((speed_jt6_ex - speed_jt6_gt) / speed_jt6_gt * 100);
-            }
-
-            var height_jt6_ex = getAmplitudeY(bufferTrial, exArray[i], 6);
-            if (Math.abs(height_jt6_gt) < threshold.HeightChange) {
-                barData.leftHandHeightChange.push(0);
-            }
-            else {
-                barData.leftHandHeightChange.push((height_jt6_ex - height_jt6_gt) / height_jt6_gt * 100);
-            }
-
-            var speed_jt10_ex = getSpeed(bufferTrial, exArray[i], 10);
-            if (Math.abs(speed_jt10_gt) < threshold.Speed) {
-                barData.rightHandSpeed.push(0);
-            }
-            else {
-                barData.rightHandSpeed.push((speed_jt10_ex - speed_jt10_gt) / speed_jt10_gt * 100);
-            }
-
-            var height_jt10_ex = getAmplitudeY(bufferTrial, exArray[i], 10);
-            if (Math.abs(height_jt10_gt) < threshold.HeightChange) {
-                barData.rightHandHeightChange.push(0);
-            }
-            else {
-                barData.rightHandHeightChange.push((height_jt10_ex - height_jt10_gt) / height_jt10_gt * 100);
-            }
-
-            var speed_jt0_ex = getSpeed(bufferTrial, exArray[i], 0);
-            if (Math.abs(speed_jt0_gt) < threshold.Speed) {
-                barData.pelvicSpeed.push(0);
-            }
-            else {
-                barData.pelvicSpeed.push((speed_jt0_ex - speed_jt0_gt) / speed_jt0_gt * 100);
-            }
-
-            var height_jt0_ex = getAmplitudeY(bufferTrial, exArray[i], 0);
-            if (Math.abs(height_jt0_gt) < threshold.HeightChange) {
-                barData.pelvicHeightChange.push(0);
-            }
-            else {
-                barData.pelvicHeightChange.push((height_jt0_ex - height_jt0_gt) / height_jt0_gt * 100);
-            }
-
-            var lean_jt1_ex = getOrientation(bufferTrial, exArray[i], 1);
-            if (Math.abs(lean_jt1_ex) < threshold.HeightChange) {
-                barData.SpineMidOrientation.push(0);
-            }
-            else {
-                barData.SpineMidOrientation.push((lean_jt1_ex - lean_jt1_gt) / lean_jt1_gt * 100);
-            }
-
-            var ampZ_jt0_ex = getAmplitudeZ(bufferTrial, exArray[i], 0);
-            if (Math.abs(ampZ_jt0_gt) < threshold.HeightChange) {
-                barData.SpineBaseMovement.push(0);
-            }
-            else {
-                barData.SpineBaseMovement.push((ampZ_jt0_ex - ampZ_jt0_gt) / ampZ_jt0_gt * 100);
-            }
-
-        }
-        return barData;
-    }
+    return barData;
+}
 }
