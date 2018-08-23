@@ -112,7 +112,7 @@ $(document).ready(function () {
   }
 
 
-  function liveupdateCanvas1(bodyFrame, tracingID){
+  function drawBody(bodyFrame, tracingID){
     ctx1.clearRect(0, 0, width, height);
     //drawCircle(ctx1, 50, 50, 10, "red"); removed if following code line works
     //drawCenterCircle(width/2, height/5, 50, body.joints[2].depthX * width, body.joints[2].depthY * height);
