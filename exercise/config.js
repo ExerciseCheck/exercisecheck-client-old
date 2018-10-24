@@ -56,7 +56,7 @@ const config = {
       method: 'POST',
       host: 'localhost',
       port: '9001',
-      path: '/api/refexercises',
+      path: 'api/refexercises',
       headers: {
         'Content-Type': 'application/json'
       }
